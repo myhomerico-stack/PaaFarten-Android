@@ -165,3 +165,27 @@ fun ApiClient.uploadReceipt(baseUrl:String,token:String,type:String,description:
         Handler(Looper.getMainLooper()).post{callback(r)}
     }.start()
 }
+
+
+fun ApiClient.updateProfile(baseUrl:String,token:String,name:String,phone:String,callback:(Result<ApiProfile>)->Unit){
+    Thread {
+        val r=runCatching {
+            val root=if(baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+            val conn=(URL(root+"profile.php").openConnection() as HttpURLConnection).apply{
+                requestMethod="POST";connectTimeout=6000;readTimeout=6000;doOutput=true
+                setRequestProperty("Authorization","Bearer $token")
+                setRequestProperty("Content-Type","application/x-www-form-urlencoded; charset=UTF-8")
+                setRequestProperty("Accept","application/json")
+            }
+            val body="name="+URLEncoder.encode(name,"UTF-8")+"&phone="+URLEncoder.encode(phone,"UTF-8")
+            conn.outputStream.use{it.write(body.toByteArray(Charsets.UTF_8))}
+            val code=conn.responseCode
+            val raw=(if(code in 200..299)conn.inputStream else conn.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
+            val j=JSONObject(raw)
+            if(code !in 200..299 || !j.optBoolean("ok")) throw IllegalStateException(j.optString("message","HTTP $code"))
+            val p=j.optJSONObject("profile") ?: JSONObject().apply { put("name",name);put("phone",phone);put("email","") }
+            ApiProfile(p.optString("name",name),p.optString("email"),p.optString("phone",phone))
+        }
+        Handler(Looper.getMainLooper()).post{callback(r)}
+    }.start()
+}
