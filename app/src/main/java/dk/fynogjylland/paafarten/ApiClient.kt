@@ -122,7 +122,7 @@ fun ApiClient.profile(baseUrl:String,token:String,callback:(Result<ApiProfile>)-
     }.start()
 }
 
-data class ApiReceipt(val id:Int,val type:String,val description:String,val amount:String,val createdAt:String,val status:String)
+data class ApiReceipt(val id:Int,val type:String,val description:String,val amount:String,val createdAt:String,val status:String,val imageUrl:String="")
 
 fun ApiClient.receipts(baseUrl:String,token:String,callback:(Result<List<ApiReceipt>>)->Unit){
     Thread {
@@ -131,7 +131,7 @@ fun ApiClient.receipts(baseUrl:String,token:String,callback:(Result<List<ApiRece
             val a=j.getJSONArray("receipts")
             (0 until a.length()).map{i->
                 val x=a.getJSONObject(i)
-                ApiReceipt(x.optInt("id"),x.optString("type"),x.optString("description"),x.optString("amount"),x.optString("created_at"),x.optString("status","Ny"))
+                ApiReceipt(x.optInt("id"),x.optString("type"),x.optString("description"),x.optString("amount"),x.optString("created_at"),x.optString("status","Ny"),x.optString("image_url",x.optString("image")))
             }
         }
         Handler(Looper.getMainLooper()).post{callback(r)}
@@ -159,7 +159,7 @@ fun ApiClient.uploadReceipt(baseUrl:String,token:String,type:String,description:
             val j=JSONObject(raw)
             if(code !in 200..299 || !j.optBoolean("ok")) throw IllegalStateException(j.optString("message","HTTP $code"))
             val receipt=j.optJSONObject("receipt")
-            if(receipt!=null) ApiReceipt(receipt.optInt("id"),receipt.optString("type",type),receipt.optString("description",description),receipt.optString("amount",amount),receipt.optString("created_at"),receipt.optString("status","Ny"))
+            if(receipt!=null) ApiReceipt(receipt.optInt("id"),receipt.optString("type",type),receipt.optString("description",description),receipt.optString("amount",amount),receipt.optString("created_at"),receipt.optString("status","Ny"),receipt.optString("image_url",receipt.optString("image")))
             else ApiReceipt(j.optInt("id"),type,description,amount,j.optString("created_at","Lige nu"),j.optString("status","Ny"))
         }
         Handler(Looper.getMainLooper()).post{callback(r)}
