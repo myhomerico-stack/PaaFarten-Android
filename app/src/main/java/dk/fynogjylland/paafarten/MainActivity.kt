@@ -44,6 +44,7 @@ fun PaaFartenApp() {
         val tabs = listOf(
             AppTab("I dag") { Icon(Icons.Default.Home, null) },
             AppTab("Vagtplan") { Icon(Icons.Default.CalendarMonth, null) },
+            AppTab("Timer") { Icon(Icons.Default.Schedule, null) },
             AppTab("Kvittering") { Icon(Icons.Default.ReceiptLong, null) },
             AppTab("Profil") { Icon(Icons.Default.Person, null) }
         )
@@ -72,7 +73,8 @@ fun PaaFartenApp() {
                 when (selected) {
                     0 -> TodayScreen()
                     1 -> ShiftCalendarScreen()
-                    2 -> ReceiptScreen()
+                    2 -> HoursScreen()
+                    3 -> ReceiptScreen()
                     else -> ProfileScreen()
                 }
             }
@@ -257,5 +259,42 @@ private fun ProfileLine(label: String, value: String) {
     Column {
         Text(label, style = MaterialTheme.typography.labelMedium)
         Text(value, fontWeight = FontWeight.Medium)
+    }
+}
+
+
+@Composable
+private fun HoursScreen() {
+    val rows = listOf(
+        "20/08" to "8 t. 45 min.",
+        "21/08" to "7 t. 30 min.",
+        "24/08" to "9 t. 00 min.",
+        "25/08" to "8 t. 15 min."
+    )
+    LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Text("Mine timer", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Lønperiode: 20. august – 19. september")
+        }
+        item {
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Timer i perioden", style = MaterialTheme.typography.labelLarge)
+                    Text("33 t. 30 min.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text("Timerne hentes fra dine registrerede vagter.")
+                }
+            }
+        }
+        items(rows) { row ->
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(row.first, fontWeight = FontWeight.Medium)
+                    Text(row.second, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        item {
+            Text("Perioden går altid fra den 20. i måneden til den 19. i næste måned. Forrige og næste periode kobles på sammen med serverdata.")
+        }
     }
 }
