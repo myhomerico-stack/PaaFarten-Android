@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.YearMonth
+import androidx.compose.ui.window.Dialog
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -125,6 +126,7 @@ private fun LoginScreen(onLogin: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var selectedReceipt by remember { mutableStateOf<ApiReceipt?>(null) }
     var error by remember { mutableStateOf("") }
 
     if (showServer) {
@@ -500,11 +502,32 @@ private fun ReceiptScreen() {
             receipts==null -> item{CircularProgressIndicator()}
             receipts!!.isEmpty() -> item{Text("Du har endnu ikke indsendt kvitteringer.")}
             else -> items(receipts!!){r->
-                ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(14.dp)){
+                ElevatedCard(Modifier.fillMaxWidth().clickable{selectedReceipt=r}){Column(Modifier.padding(14.dp)){
                     Text("${r.createdAt} · ${r.type}",fontWeight=FontWeight.Bold)
                     Text(r.description)
                     Text("${r.amount} kr. · ${r.status}")
                 }}
+            }
+        }
+    }
+    selectedReceipt?.let { r ->
+        Dialog(onDismissRequest={selectedReceipt=null}) {
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+                        Text("Kvittering",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
+                        IconButton(onClick={selectedReceipt=null}){Icon(Icons.Default.Close,"Luk")}
+                    }
+                    Text(r.createdAt,fontWeight=FontWeight.Bold)
+                    Text(r.type)
+                    Text(r.description)
+                    Text("${r.amount} kr. · ${r.status}")
+                    if(r.imageUrl.isNotBlank()) {
+                        Text("Kvitteringsbilledet er gemt på serveren.",style=MaterialTheme.typography.bodySmall)
+                    } else {
+                        Text("Billedet er gemt, men serveren sender endnu ikke billedadressen tilbage til appen.",style=MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         }
     }
