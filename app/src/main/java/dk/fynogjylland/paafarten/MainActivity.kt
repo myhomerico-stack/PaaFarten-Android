@@ -415,7 +415,10 @@ private fun ReceiptScreen() {
     var message by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
 
-    fun loadHistory(){ ApiClient.receipts(url,token){it.onSuccess{r->receipts=r}.onFailure{e->message=e.message?:"Kunne ikke hente historik"}} }
+    fun loadHistory(){ ApiClient.receipts(url,token){
+        it.onSuccess{r->receipts=r}
+          .onFailure{e-> receipts=emptyList(); message="Historik kunne ikke hentes: "+(e.message?:"serverfejl") }
+    } }
     LaunchedEffect(token){ loadHistory() }
 
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->
@@ -472,7 +475,12 @@ private fun ReceiptScreen() {
                 busy=true; message=""
                 ApiClient.uploadReceipt(url,token,type,description,amount,img){r->
                     busy=false
-                    r.onSuccess { message="Kvitteringen er sendt til kontoret."; description=""; amount=""; bitmap=null; loadHistory() }
+                    r.onSuccess { saved->
+                        receipts=listOf(saved)+(receipts?:emptyList())
+                        message="Kvitteringen er sendt til kontoret og gemt."
+                        description=""; amount=""; bitmap=null
+                        loadHistory()
+                    }
                      .onFailure { message=it.message?:"Kunne ikke sende kvitteringen." }
                 }
             },enabled=!busy&&description.isNotBlank()&&amount.isNotBlank()&&bitmap!=null,modifier=Modifier.fillMaxWidth()){
