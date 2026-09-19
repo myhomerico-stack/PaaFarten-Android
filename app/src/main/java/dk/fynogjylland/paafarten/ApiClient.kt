@@ -84,10 +84,11 @@ fun ApiClient.shifts(baseUrl:String,token:String,from:String,to:String,callback:
                 val s=a.getJSONObject(i); val sa=s.optJSONArray("steps")
                 val steps=if(sa==null) emptyList() else (0 until sa.length()).map { k ->
                     val x=sa.getJSONObject(k)
-                    val time=listOf("planned_time","time","step_time","start_time").map{x.optString(it)}.firstOrNull{it.isNotBlank()}.orEmpty()
-                    val title=listOf("title","label","step_title","action","type").map{x.optString(it)}.firstOrNull{it.isNotBlank()}
-                        ?: "Vagttrin"
-                    val detail=listOf("description","detail","notes","from_address","to_address").map{x.optString(it)}.firstOrNull{it.isNotBlank()}.orEmpty()
+                    // Samme felter som minside/day.php: step_time, step_text og detail.
+                    // Tidspunktet er det gemte tidspunkt fra På farten-vagtplanen.
+                    val time=x.optString("step_time")
+                    val title=x.optString("step_text").ifBlank { "Vagttrin" }
+                    val detail=x.optString("detail")
                     ApiShiftStep(time,title,detail)
                 }
                 ApiShift(s.optString("work_date"),s.optString("planned_start"),s.optString("planned_end"),s.optInt("planned_minutes"),s.optInt("actual_minutes"),steps)
