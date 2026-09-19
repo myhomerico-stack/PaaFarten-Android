@@ -17,6 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
@@ -36,7 +39,15 @@ fun PaaFartenApp() {
     var loggedIn by remember { mutableStateOf(false) }
     var selected by remember { mutableIntStateOf(0) }
 
-    MaterialTheme {
+    val companyColors = lightColorScheme(
+        primary = Color(0xFFD99A00),
+        onPrimary = Color.Black,
+        secondary = Color.Black,
+        onSecondary = Color.White,
+        surface = Color(0xFFFFFBF2),
+        background = Color(0xFFFFFBF2)
+    )
+    MaterialTheme(colorScheme = companyColors) {
         if (!loggedIn) {
             LoginScreen { loggedIn = true }
             return@MaterialTheme
@@ -53,7 +64,18 @@ fun PaaFartenApp() {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("På farten") },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.foundation.Image(
+                                painter = painterResource(R.drawable.company_logo),
+                                contentDescription = null,
+                                modifier = Modifier.size(46.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("På farten", fontWeight = FontWeight.Bold)
+                        }
+                    },
                     actions = { IconButton(onClick = { loggedIn = false }) { Icon(Icons.Default.Logout, "Log ud") } }
                 )
             },
@@ -100,8 +122,15 @@ private fun LoginScreen(onLogin: () -> Unit) {
 
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center) {
+            androidx.compose.foundation.Image(
+                painter = painterResource(R.drawable.company_logo),
+                contentDescription = "Farhusser Fyn & Jylland",
+                modifier = Modifier.fillMaxWidth().height(180.dp),
+                contentScale = ContentScale.Fit
+            )
+            Spacer(Modifier.height(10.dp))
             Text("På farten", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-            Text("Chauffør-login", style = MaterialTheme.typography.titleMedium)
+            Text("Chauffør & medarbejder", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(28.dp))
             OutlinedTextField(email, { email = it }, label = { Text("E-mail") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Spacer(Modifier.height(12.dp))
