@@ -55,3 +55,58 @@ object ApiClient {
         }.start()
     }
 }
+
+
+data class ApiShift(val date:String,val start:String,val end:String,val plannedMinutes:Int,val actualMinutes:Int,val steps:List<String>)
+data class ApiHours(val from:String,val to:String,val plannedMinutes:Int,val actualMinutes:Int,val rows:List<Pair<String,Int>>)
+data class ApiProfile(val name:String,val email:String,val phone:String)
+
+private fun authGet(baseUrl:String, token:String, endpoint:String): JSONObject {
+    val root=if(baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+    val conn=(URL(root+endpoint).openConnection() as HttpURLConnection).apply {
+        requestMethod="GET"; connectTimeout=6000; readTimeout=6000
+        setRequestProperty("Accept","application/json")
+        setRequestProperty("Authorization","Bearer $token")
+    }
+    val code=conn.responseCode
+    val raw=(if(code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
+    if(code !in 200..299) throw IllegalStateException(JSONObject(raw).optString("message","HTTP $code"))
+    return JSONObject(raw)
+}
+
+fun ApiClient.shifts(baseUrl:String,token:String,from:String,to:String,callback:(Result<List<ApiShift>>)->Unit) {
+    Thread {
+        val r=runCatching {
+            val j=authGet(baseUrl,token,"shifts.php?from=$from&to=$to")
+            val a=j.getJSONArray("shifts")
+            (0 until a.length()).map { i ->
+                val s=a.getJSONObject(i); val sa=s.optJSONArray("steps")
+                val steps=if(sa==null) emptyList() else (0 until sa.length()).map { k ->
+                    val x=sa.getJSONObject(k)
+                    listOf(x.optString("planned_time"),x.optString("title"),x.optString("label"),x.optString("description"),x.optString("from_address"),x.optString("to_address")).firstOrNull{it.isNotBlank()} ?: "Vagttrin"
+                }
+                ApiShift(s.optString("work_date"),s.optString("planned_start"),s.optString("planned_end"),s.optInt("planned_minutes"),s.optInt("actual_minutes"),steps)
+            }
+        }
+        Handler(Looper.getMainLooper()).post{callback(r)}
+    }.start()
+}
+fun ApiClient.hours(baseUrl:String,token:String,offset:Int,callback:(Result<ApiHours>)->Unit) {
+    Thread {
+        val r=runCatching {
+            val j=authGet(baseUrl,token,"hours.php?offset=$offset"); val p=j.getJSONObject("period"); val a=j.getJSONArray("hours")
+            val rows=(0 until a.length()).map{i-> val x=a.getJSONObject(i); x.optString("work_date") to x.optInt("actual_minutes")}
+            ApiHours(p.optString("from"),p.optString("to"),p.optInt("planned_minutes"),p.optInt("actual_minutes"),rows)
+        }
+        Handler(Looper.getMainLooper()).post{callback(r)}
+    }.start()
+}
+fun ApiClient.profile(baseUrl:String,token:String,callback:(Result<ApiProfile>)->Unit) {
+    Thread {
+        val r=runCatching {
+            val p=authGet(baseUrl,token,"profile.php").getJSONObject("profile")
+            ApiProfile(p.optString("name"),p.optString("email"),p.optString("phone",p.optString("mobile")))
+        }
+        Handler(Looper.getMainLooper()).post{callback(r)}
+    }.start()
+}
