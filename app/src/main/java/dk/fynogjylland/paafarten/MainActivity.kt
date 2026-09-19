@@ -271,7 +271,7 @@ private fun HoursScreen(){
             Row(verticalAlignment=Alignment.CenterVertically){
                 IconButton(onClick={offset--}){Icon(Icons.Default.ChevronLeft,null)}
                 Text(data?.let{"${it.from} – ${it.to}"}?:"Henter lønperiode…",Modifier.weight(1f))
-                IconButton(onClick={if(offset<0){{offset++}}else{{}}}){Icon(Icons.Default.ChevronRight,null)}
+                IconButton(onClick={ if(offset < 0) offset++ }){Icon(Icons.Default.ChevronRight,null)}
             }
         }
         if(error.isNotBlank()) item{Text(error,color=MaterialTheme.colorScheme.error)}
