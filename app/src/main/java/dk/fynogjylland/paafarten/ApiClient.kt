@@ -21,8 +21,8 @@ object ApiClient {
                 val root = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
                 val conn = (URL(root + "login.php").openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
-                    connectTimeout = 10000
-                    readTimeout = 10000
+                    connectTimeout = 6000
+                    readTimeout = 6000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
                     setRequestProperty("Accept", "application/json")
