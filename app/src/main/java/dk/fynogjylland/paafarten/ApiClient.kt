@@ -189,3 +189,25 @@ fun ApiClient.updateProfile(baseUrl:String,token:String,name:String,phone:String
         Handler(Looper.getMainLooper()).post{callback(r)}
     }.start()
 }
+
+
+fun ApiClient.sendAbsence(baseUrl:String,token:String,kind:String,from:String,to:String,note:String,callback:(Result<Unit>)->Unit){
+    Thread {
+        val r=runCatching {
+            val root=if(baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+            val conn=(URL(root+"absence.php").openConnection() as HttpURLConnection).apply{
+                requestMethod="POST";connectTimeout=6000;readTimeout=6000;doOutput=true
+                setRequestProperty("Authorization","Bearer $token")
+                setRequestProperty("Content-Type","application/x-www-form-urlencoded; charset=UTF-8")
+                setRequestProperty("Accept","application/json")
+            }
+            val body=listOf("kind" to kind,"from" to from,"to" to to,"note" to note).joinToString("&"){(k,v)->URLEncoder.encode(k,"UTF-8")+"="+URLEncoder.encode(v,"UTF-8")}
+            conn.outputStream.use{it.write(body.toByteArray(Charsets.UTF_8))}
+            val code=conn.responseCode
+            val raw=(if(code in 200..299)conn.inputStream else conn.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
+            val j=JSONObject(raw)
+            if(code !in 200..299 || !j.optBoolean("ok")) throw IllegalStateException(j.optString("message","HTTP $code"))
+        }
+        Handler(Looper.getMainLooper()).post{callback(r)}
+    }.start()
+}
