@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import java.time.LocalDate
+import java.time.YearMonth
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -177,198 +179,137 @@ private fun LoginScreen(onLogin: () -> Unit) {
         }
     }
 }
-private val demoShifts = listOf(
-    Shift("I dag", "06:45", "15:30", "Vagtplan", listOf("06:45 Mød på garage", "07:00 Klargør bus", "07:30 Kørsel", "12:15 Pause", "15:15 Retur til garage", "15:30 Vagt slut")),
-    Shift("Mandag 21/9", "07:00", "16:00", "Vagtplan", listOf("07:00 Mød på garage", "07:30 Kørsel", "16:00 Vagt slut")),
-    Shift("Tirsdag 22/9", "08:00", "14:00", "Klargøring", listOf("08:00 Start", "14:00 Slut"))
-)
+
+@Composable
+private fun rememberConnection(): Pair<String,String> {
+    val context=androidx.compose.ui.platform.LocalContext.current
+    val server=remember { context.getSharedPreferences("paafarten_server",Context.MODE_PRIVATE) }
+    val login=remember { context.getSharedPreferences("paafarten_login",Context.MODE_PRIVATE) }
+    return (server.getString("api_url","https://minside.fynogjylland.dk/api/") ?: "https://minside.fynogjylland.dk/api/") to
+        (login.getString("token","") ?: "")
+}
+private fun mins(v:Int)=if(v<=0) "0 t." else "${v/60} t. ${v%60} min."
 
 @Composable
 private fun TodayScreen() {
-    val shift = demoShifts.first()
-    LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text("I dag", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("Din næste planlagte vagt")
-        }
-        item { ShiftCard(shift, expanded = true) }
-        item {
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Hurtig adgang", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Vagtplan, kvitteringer og profil ligger i menuen nederst.")
-                }
-            }
+    val (url,token)=rememberConnection()
+    var shifts by remember { mutableStateOf<List<ApiShift>?>(null) }
+    var error by remember { mutableStateOf("") }
+    LaunchedEffect(token) {
+        val d=LocalDate.now().toString()
+        ApiClient.shifts(url,token,d,d){ it.onSuccess { x->shifts=x }.onFailure { e->error=e.message?:"Serverfejl" } }
+    }
+    LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+        item { Text("I dag",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold) }
+        when {
+            error.isNotBlank()->item{Text(error,color=MaterialTheme.colorScheme.error)}
+            shifts==null->item{CircularProgressIndicator()}
+            shifts!!.isEmpty()->item{Text("Ingen vagt planlagt i dag.")}
+            else->items(shifts!!){ RealShiftCard(it,true) }
         }
     }
 }
-
 @Composable
 private fun ShiftCalendarScreen() {
-    var month by remember { mutableStateOf("September 2026") }
-    LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val (url,token)=rememberConnection()
+    var month by remember { mutableStateOf(YearMonth.now()) }
+    var shifts by remember { mutableStateOf<List<ApiShift>?>(null) }
+    var error by remember { mutableStateOf("") }
+    LaunchedEffect(month,token){
+        shifts=null; error=""
+        ApiClient.shifts(url,token,month.atDay(1).toString(),month.atEndOfMonth().toString()){
+            it.onSuccess{x->shifts=x}.onFailure{e->error=e.message?:"Serverfejl"}
+        }
+    }
+    LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
         item {
-            Text("Vagtplan", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = {}) { Icon(Icons.Default.ChevronLeft, null) }
-                Text(month, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                IconButton(onClick = {}) { Icon(Icons.Default.ChevronRight, null) }
+            Text("Vagtplan",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)
+            Row(verticalAlignment=Alignment.CenterVertically){
+                IconButton(onClick={month=month.minusMonths(1)}){Icon(Icons.Default.ChevronLeft,null)}
+                Text(month.toString(),Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
+                IconButton(onClick={month=month.plusMonths(1)}){Icon(Icons.Default.ChevronRight,null)}
             }
-            Text("Kalenderen viser dine vagter. Data kobles senere direkte til pf_shifts og pf_shift_steps.")
         }
-        items(demoShifts) { ShiftCard(it, expanded = false) }
+        when {
+            error.isNotBlank()->item{Text(error,color=MaterialTheme.colorScheme.error)}
+            shifts==null->item{CircularProgressIndicator()}
+            shifts!!.isEmpty()->item{Text("Ingen vagter i denne måned.")}
+            else->items(shifts!!){RealShiftCard(it,false)}
+        }
     }
 }
-
 @Composable
-private fun ShiftCard(shift: Shift, expanded: Boolean) {
+private fun RealShiftCard(s:ApiShift,expanded:Boolean){
     var open by remember { mutableStateOf(expanded) }
-    ElevatedCard(Modifier.fillMaxWidth().clickable { open = !open }) {
-        Column(Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text(shift.date, fontWeight = FontWeight.Bold)
-                    Text(shift.title)
-                }
-                Text("${shift.start} – ${shift.end}", fontWeight = FontWeight.Bold)
+    ElevatedCard(Modifier.fillMaxWidth().clickable{open=!open}){
+        Column(Modifier.padding(16.dp)){
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+                Text(s.date,fontWeight=FontWeight.Bold)
+                Text("${s.start} – ${s.end}",fontWeight=FontWeight.Bold)
             }
-            if (open) {
-                HorizontalDivider(Modifier.padding(vertical = 10.dp))
-                shift.details.forEach { Text(it, modifier = Modifier.padding(vertical = 3.dp)) }
+            Text("Planlagt: ${mins(s.plannedMinutes)}")
+            if(open){
+                HorizontalDivider(Modifier.padding(vertical=10.dp))
+                if(s.steps.isEmpty()) Text("Ingen vagttrin.") else s.steps.forEach{Text(it,Modifier.padding(vertical=3.dp))}
             }
         }
     }
 }
+@Composable
+private fun HoursScreen(){
+    val (url,token)=rememberConnection()
+    var offset by remember { mutableIntStateOf(0) }
+    var data by remember { mutableStateOf<ApiHours?>(null) }
+    var error by remember { mutableStateOf("") }
+    LaunchedEffect(offset,token){
+        data=null;error=""
+        ApiClient.hours(url,token,offset){it.onSuccess{x->data=x}.onFailure{e->error=e.message?:"Serverfejl"}}
+    }
+    LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+        item{
+            Text("Mine timer",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)
+            Row(verticalAlignment=Alignment.CenterVertically){
+                IconButton(onClick={offset--}){Icon(Icons.Default.ChevronLeft,null)}
+                Text(data?.let{"${it.from} – ${it.to}"}?:"Henter lønperiode…",Modifier.weight(1f))
+                IconButton(onClick={if(offset<0){{offset++}}else{{}}}){Icon(Icons.Default.ChevronRight,null)}
+            }
+        }
+        if(error.isNotBlank()) item{Text(error,color=MaterialTheme.colorScheme.error)}
+        else if(data==null) item{CircularProgressIndicator()}
+        else {
+            item{ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp)){
+                Text("Registrerede timer",style=MaterialTheme.typography.labelLarge)
+                Text(mins(data!!.actualMinutes),style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)
+                Text("Planlagt: ${mins(data!!.plannedMinutes)}")
+            }}}
+            if(data!!.rows.isEmpty()) item{Text("Ingen timer registreret i perioden.")}
+            else items(data!!.rows){r->ElevatedCard(Modifier.fillMaxWidth()){Row(Modifier.fillMaxWidth().padding(16.dp),horizontalArrangement=Arrangement.SpaceBetween){Text(r.first);Text(mins(r.second),fontWeight=FontWeight.Bold)}}}
+        }
+    }
+}
+@Composable
+private fun ProfileScreen(){
+    val (url,token)=rememberConnection()
+    var p by remember { mutableStateOf<ApiProfile?>(null) }
+    var error by remember { mutableStateOf("") }
+    LaunchedEffect(token){ApiClient.profile(url,token){it.onSuccess{x->p=x}.onFailure{e->error=e.message?:"Serverfejl"}}}
+    LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+        item{Icon(Icons.Default.AccountCircle,null,Modifier.size(72.dp));Text("Min profil",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)}
+        if(error.isNotBlank()) item{Text(error,color=MaterialTheme.colorScheme.error)}
+        else if(p==null) item{CircularProgressIndicator()}
+        else item{ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+            ProfileLine("Navn",p!!.name); ProfileLine("Telefon",p!!.phone); ProfileLine("E-mail",p!!.email)
+        }}}
+    }
+}
+@Composable private fun ProfileLine(label:String,value:String){Column{Text(label,style=MaterialTheme.typography.labelMedium);Text(if(value.isBlank()) "Ikke oplyst" else value,fontWeight=FontWeight.Medium)}}
 
 @Composable
 private fun ReceiptScreen() {
-    var type by remember { mutableStateOf("Udlæg") }
-    var text by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var sent by remember { mutableStateOf(false) }
-
-    LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text("Kvittering", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("Send udlæg eller køb foretaget med firmakort.")
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = type == "Udlæg", onClick = { type = "Udlæg" }, label = { Text("Udlæg") })
-                FilterChip(selected = type == "Indkøb fra kort", onClick = { type = "Indkøb fra kort" }, label = { Text("Indkøb fra kort") })
-            }
-        }
-        item {
-            OutlinedButton(onClick = { }, modifier = Modifier.fillMaxWidth().height(72.dp)) {
-                Icon(Icons.Default.PhotoCamera, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Tag billede af kvittering")
-            }
-        }
-        item { OutlinedTextField(text, { text = it }, label = { Text("Tekst / hvad er købt?") }, modifier = Modifier.fillMaxWidth()) }
-        item { OutlinedTextField(amount, { amount = it }, label = { Text("Beløb i kr.") }, modifier = Modifier.fillMaxWidth()) }
-        item {
-            Button(
-                onClick = { sent = true },
-                enabled = text.isNotBlank() && amount.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Send kvittering") }
-        }
-        if (sent) item {
-            AssistChip(onClick = {}, label = { Text("Klar til servertilkobling – oplysningerne er udfyldt") }, leadingIcon = { Icon(Icons.Default.CheckCircle, null) })
-        }
-        item {
-            Text("Seneste", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            ReceiptCard(Receipt("Udlæg", "Parkering", "85,00 kr.", "Ny"))
-            Spacer(Modifier.height(8.dp))
-            ReceiptCard(Receipt("Indkøb fra kort", "Sprinklervæske", "149,95 kr.", "Godkendt"))
-        }
+    LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+        item{Text("Kvitteringer",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text("Kvitteringsupload kobles på som næste serverfunktion.")}
     }
 }
-
-@Composable
-private fun ReceiptCard(r: Receipt) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(14.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Text(r.type, fontWeight = FontWeight.Bold)
-                Text(r.text)
-                Text(r.status, style = MaterialTheme.typography.bodySmall)
-            }
-            Text(r.amount, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun ProfileScreen() {
-    LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Icon(Icons.Default.AccountCircle, null, modifier = Modifier.size(72.dp))
-            Text("Min profil", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        }
-        item {
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ProfileLine("Navn", "Hentes fra På farten")
-                    ProfileLine("Telefon", "Hentes fra chaufførprofil")
-                    ProfileLine("E-mail", "Hentes fra chaufførprofil")
-                    ProfileLine("Garage", "Hentes fra chaufførprofil")
-                }
-            }
-        }
-        item {
-            Text("Appen er klar til næste trin: forbindelse til På farten-serveren, rigtigt login, vagtplaner og upload af kvitteringsbilleder.")
-        }
-    }
-}
-
-@Composable
-private fun ProfileLine(label: String, value: String) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelMedium)
-        Text(value, fontWeight = FontWeight.Medium)
-    }
-}
-
-
-@Composable
-private fun HoursScreen() {
-    val rows = listOf(
-        "20/08" to "8 t. 45 min.",
-        "21/08" to "7 t. 30 min.",
-        "24/08" to "9 t. 00 min.",
-        "25/08" to "8 t. 15 min."
-    )
-    LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text("Mine timer", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("Lønperiode: 20. august – 19. september")
-        }
-        item {
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Timer i perioden", style = MaterialTheme.typography.labelLarge)
-                    Text("33 t. 30 min.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Text("Timerne hentes fra dine registrerede vagter.")
-                }
-            }
-        }
-        items(rows) { row ->
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(row.first, fontWeight = FontWeight.Medium)
-                    Text(row.second, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-        item {
-            Text("Perioden går altid fra den 20. i måneden til den 19. i næste måned. Forrige og næste periode kobles på sammen med serverdata.")
-        }
-    }
-}
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
