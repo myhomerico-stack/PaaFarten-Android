@@ -189,6 +189,13 @@ private fun rememberConnection(): Pair<String,String> {
         (login.getString("token","") ?: "")
 }
 private fun mins(v:Int)=if(v<=0) "0 t." else "${v/60} t. ${v%60} min."
+private fun clock(v:String):String {
+    val s=v.trim()
+    val m=Regex("""(?:^|[ T])(\d{2}:\d{2})(?::\d{2})?(?:$|[+Z])""").find(s)
+    return m?.groupValues?.get(1)
+        ?: Regex("""^(\d{2}:\d{2})""").find(s)?.groupValues?.get(1)
+        ?: s
+}
 
 @Composable
 private fun TodayScreen() {
@@ -245,14 +252,14 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
         Column(Modifier.padding(16.dp)){
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
                 Text(s.date,fontWeight=FontWeight.Bold)
-                Text("${s.start} – ${s.end}",fontWeight=FontWeight.Bold)
+                Text("${clock(s.start)} – ${clock(s.end)}",fontWeight=FontWeight.Bold)
             }
             Text("Planlagt: ${mins(s.plannedMinutes)}")
             if(open){
                 HorizontalDivider(Modifier.padding(vertical=10.dp))
                 if(s.steps.isEmpty()) Text("Ingen vagttrin.") else s.steps.forEach { step ->
                     Row(Modifier.fillMaxWidth().padding(vertical=6.dp)) {
-                        Text(step.time.take(5), modifier=Modifier.width(58.dp), fontWeight=FontWeight.Bold)
+                        Text(clock(step.time), modifier=Modifier.width(58.dp), fontWeight=FontWeight.Bold)
                         Column {
                             Text(step.title, fontWeight=FontWeight.Bold)
                             if(step.detail.isNotBlank()) Text(step.detail, style=MaterialTheme.typography.bodySmall)
