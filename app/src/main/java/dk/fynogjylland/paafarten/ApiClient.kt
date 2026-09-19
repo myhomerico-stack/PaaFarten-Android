@@ -1,6 +1,9 @@
 package dk.fynogjylland.paafarten
 
 import android.os.Handler
+import android.graphics.Bitmap
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 import android.os.Looper
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -114,6 +117,48 @@ fun ApiClient.profile(baseUrl:String,token:String,callback:(Result<ApiProfile>)-
         val r=runCatching {
             val p=authGet(baseUrl,token,"profile.php").getJSONObject("profile")
             ApiProfile(p.optString("name"),p.optString("email"),p.optString("phone",p.optString("mobile")))
+        }
+        Handler(Looper.getMainLooper()).post{callback(r)}
+    }.start()
+}
+
+data class ApiReceipt(val id:Int,val type:String,val description:String,val amount:String,val createdAt:String,val status:String)
+
+fun ApiClient.receipts(baseUrl:String,token:String,callback:(Result<List<ApiReceipt>>)->Unit){
+    Thread {
+        val r=runCatching {
+            val j=authGet(baseUrl,token,"receipts.php")
+            val a=j.getJSONArray("receipts")
+            (0 until a.length()).map{i->
+                val x=a.getJSONObject(i)
+                ApiReceipt(x.optInt("id"),x.optString("type"),x.optString("description"),x.optString("amount"),x.optString("created_at"),x.optString("status","Ny"))
+            }
+        }
+        Handler(Looper.getMainLooper()).post{callback(r)}
+    }.start()
+}
+fun ApiClient.uploadReceipt(baseUrl:String,token:String,type:String,description:String,amount:String,bitmap:Bitmap,callback:(Result<Unit>)->Unit){
+    Thread {
+        val r=runCatching {
+            val out=ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG,82,out)
+            val image=Base64.encodeToString(out.toByteArray(),Base64.NO_WRAP)
+            val root=if(baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+            val conn=(URL(root+"receipt_upload.php").openConnection() as HttpURLConnection).apply{
+                requestMethod="POST";connectTimeout=10000;readTimeout=15000;doOutput=true
+                setRequestProperty("Authorization","Bearer $token")
+                setRequestProperty("Content-Type","application/x-www-form-urlencoded; charset=UTF-8")
+                setRequestProperty("Accept","application/json")
+            }
+            val body=listOf(
+                "type" to type,"description" to description,"amount" to amount,"image" to image
+            ).joinToString("&"){(k,v)->URLEncoder.encode(k,"UTF-8")+"="+URLEncoder.encode(v,"UTF-8")}
+            conn.outputStream.use{it.write(body.toByteArray(Charsets.UTF_8))}
+            val code=conn.responseCode
+            val raw=(if(code in 200..299)conn.inputStream else conn.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
+            val j=JSONObject(raw)
+            if(code !in 200..299 || !j.optBoolean("ok")) throw IllegalStateException(j.optString("message","HTTP $code"))
+            Unit
         }
         Handler(Looper.getMainLooper()).post{callback(r)}
     }.start()
