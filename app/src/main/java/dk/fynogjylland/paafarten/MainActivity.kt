@@ -250,7 +250,15 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
             Text("Planlagt: ${mins(s.plannedMinutes)}")
             if(open){
                 HorizontalDivider(Modifier.padding(vertical=10.dp))
-                if(s.steps.isEmpty()) Text("Ingen vagttrin.") else s.steps.forEach{Text(it,Modifier.padding(vertical=3.dp))}
+                if(s.steps.isEmpty()) Text("Ingen vagttrin.") else s.steps.forEach { step ->
+                    Row(Modifier.fillMaxWidth().padding(vertical=6.dp)) {
+                        Text(step.time.take(5), modifier=Modifier.width(58.dp), fontWeight=FontWeight.Bold)
+                        Column {
+                            Text(step.title, fontWeight=FontWeight.Bold)
+                            if(step.detail.isNotBlank()) Text(step.detail, style=MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
             }
         }
     }
