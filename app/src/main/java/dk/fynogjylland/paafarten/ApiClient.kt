@@ -86,9 +86,11 @@ fun ApiClient.shifts(baseUrl:String,token:String,from:String,to:String,callback:
                     val x=sa.getJSONObject(k)
                     // Samme felter som minside/day.php: step_time, step_text og detail.
                     // Tidspunktet er det gemte tidspunkt fra På farten-vagtplanen.
+                    // Serveren kan levere step_time som fuld dato+tid.
+                    // Bevar værdien; UI formatterer den til HH:mm.
                     val time=x.optString("step_time")
-                    val title=x.optString("step_text").ifBlank { "Vagttrin" }
-                    val detail=x.optString("detail")
+                    val title=x.optString("step_text").ifBlank { x.optString("title").ifBlank { "Vagttrin" } }
+                    val detail=x.optString("detail").ifBlank { x.optString("description") }
                     ApiShiftStep(time,title,detail)
                 }
                 ApiShift(s.optString("work_date"),s.optString("planned_start"),s.optString("planned_end"),s.optInt("planned_minutes"),s.optInt("actual_minutes"),steps)
