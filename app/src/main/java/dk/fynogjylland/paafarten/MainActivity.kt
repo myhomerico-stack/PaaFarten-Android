@@ -221,9 +221,10 @@ private fun ShiftCalendarScreen() {
     val (url,token)=rememberConnection()
     var month by remember { mutableStateOf(YearMonth.now()) }
     var shifts by remember { mutableStateOf<List<ApiShift>?>(null) }
+    var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
     var error by remember { mutableStateOf("") }
     LaunchedEffect(month,token){
-        shifts=null; error=""
+        shifts=null; error=""; selectedDay=null
         ApiClient.shifts(url,token,month.atDay(1).toString(),month.atEndOfMonth().toString()){
             it.onSuccess{x->shifts=x}.onFailure{e->error=e.message?:"Serverfejl"}
         }
@@ -233,15 +234,55 @@ private fun ShiftCalendarScreen() {
             Text("Vagtplan",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)
             Row(verticalAlignment=Alignment.CenterVertically){
                 IconButton(onClick={month=month.minusMonths(1)}){Icon(Icons.Default.ChevronLeft,null)}
-                Text(month.toString(),Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
+                Text("${month.month.name.lowercase().replaceFirstChar{it.uppercase()}} ${month.year}",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
                 IconButton(onClick={month=month.plusMonths(1)}){Icon(Icons.Default.ChevronRight,null)}
             }
         }
         when {
             error.isNotBlank()->item{Text(error,color=MaterialTheme.colorScheme.error)}
             shifts==null->item{CircularProgressIndicator()}
-            shifts!!.isEmpty()->item{Text("Ingen vagter i denne måned.")}
-            else->items(shifts!!){RealShiftCard(it,false)}
+            else -> {
+                item { MonthCalendar(month,shifts!!,selectedDay){selectedDay=it} }
+                val dayShifts=selectedDay?.let{d->shifts!!.filter{x->x.date.take(10)==d.toString()}} ?: emptyList()
+                if(selectedDay!=null) {
+                    item { Text(selectedDay.toString(),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
+                    if(dayShifts.isEmpty()) item{Text("Ingen vagt denne dag.")}
+                    else items(dayShifts){ RealShiftCard(it,false) }
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun MonthCalendar(month:YearMonth, shifts:List<ApiShift>, selected:LocalDate?, onDay:(LocalDate)->Unit){
+    val shiftDates=shifts.mapNotNull{runCatching{LocalDate.parse(it.date.take(10))}.getOrNull()}.toSet()
+    val first=month.atDay(1)
+    val offset=first.dayOfWeek.value-1
+    val cells=offset+month.lengthOfMonth()
+    ElevatedCard(Modifier.fillMaxWidth()){
+        Column(Modifier.padding(10.dp)){
+            Row(Modifier.fillMaxWidth()){ listOf("Man","Tir","Ons","Tor","Fre","Lør","Søn").forEach{Text(it,Modifier.weight(1f),style=MaterialTheme.typography.labelMedium)} }
+            repeat((cells+6)/7){week->
+                Row(Modifier.fillMaxWidth()){
+                    repeat(7){dow->
+                        val n=week*7+dow-offset+1
+                        if(n !in 1..month.lengthOfMonth()) Spacer(Modifier.weight(1f).height(64.dp))
+                        else {
+                            val d=month.atDay(n); val has=shiftDates.contains(d)
+                            Surface(
+                                modifier=Modifier.weight(1f).height(64.dp).padding(2.dp).clickable{onDay(d)},
+                                shape=RoundedCornerShape(8.dp),
+                                tonalElevation=if(selected==d) 6.dp else 0.dp
+                            ){
+                                Column(Modifier.padding(6.dp)){
+                                    Text(n.toString(),fontWeight=if(has) FontWeight.Bold else FontWeight.Normal)
+                                    if(has){ Spacer(Modifier.height(4.dp)); Text("Vagt",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
