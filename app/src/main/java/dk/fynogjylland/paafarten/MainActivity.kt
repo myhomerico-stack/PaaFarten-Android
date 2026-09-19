@@ -405,7 +405,6 @@ private fun AbsencePanel(){
 }
 
 @Composable
-@Composable
 private fun ReceiptImage(imageUrl: String) {
     var image by remember(imageUrl) { mutableStateOf<Bitmap?>(null) }
     var failed by remember(imageUrl) { mutableStateOf(false) }
@@ -432,6 +431,7 @@ private fun ReceiptImage(imageUrl: String) {
     }
 }
 
+@Composable
 private fun ReceiptScreen() {
     val context=androidx.compose.ui.platform.LocalContext.current
     val (url,token)=rememberConnection()
