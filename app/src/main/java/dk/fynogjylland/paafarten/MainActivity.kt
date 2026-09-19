@@ -346,7 +346,13 @@ private fun HoursScreen() {
 private fun ServerSettingsScreen(onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { context.getSharedPreferences("paafarten_server", Context.MODE_PRIVATE) }
-    var apiUrl by remember { mutableStateOf(prefs.getString("api_url", "https://minside.fynogjylland.dk/api/") ?: "") }
+    var apiUrl by remember {
+        mutableStateOf(
+            (prefs.getString("api_url", "") ?: "").let {
+                if (it.isBlank() || it == "https://fynogjylland.dk/minside/api/") "https://minside.fynogjylland.dk/api/" else it
+            }
+        )
+    }
     var saved by remember { mutableStateOf(false) }
 
     Scaffold(
