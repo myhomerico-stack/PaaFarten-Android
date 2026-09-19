@@ -137,7 +137,7 @@ fun ApiClient.receipts(baseUrl:String,token:String,callback:(Result<List<ApiRece
         Handler(Looper.getMainLooper()).post{callback(r)}
     }.start()
 }
-fun ApiClient.uploadReceipt(baseUrl:String,token:String,type:String,description:String,amount:String,bitmap:Bitmap,callback:(Result<Unit>)->Unit){
+fun ApiClient.uploadReceipt(baseUrl:String,token:String,type:String,description:String,amount:String,bitmap:Bitmap,callback:(Result<ApiReceipt>)->Unit){
     Thread {
         val r=runCatching {
             val out=ByteArrayOutputStream()
@@ -158,7 +158,9 @@ fun ApiClient.uploadReceipt(baseUrl:String,token:String,type:String,description:
             val raw=(if(code in 200..299)conn.inputStream else conn.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
             val j=JSONObject(raw)
             if(code !in 200..299 || !j.optBoolean("ok")) throw IllegalStateException(j.optString("message","HTTP $code"))
-            Unit
+            val receipt=j.optJSONObject("receipt")
+            if(receipt!=null) ApiReceipt(receipt.optInt("id"),receipt.optString("type",type),receipt.optString("description",description),receipt.optString("amount",amount),receipt.optString("created_at"),receipt.optString("status","Ny"))
+            else ApiReceipt(j.optInt("id"),type,description,amount,j.optString("created_at","Lige nu"),j.optString("status","Ny"))
         }
         Handler(Looper.getMainLooper()).post{callback(r)}
     }.start()
