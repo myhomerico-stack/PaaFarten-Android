@@ -405,6 +405,33 @@ private fun AbsencePanel(){
 }
 
 @Composable
+@Composable
+private fun ReceiptImage(imageUrl: String) {
+    var image by remember(imageUrl) { mutableStateOf<Bitmap?>(null) }
+    var failed by remember(imageUrl) { mutableStateOf(false) }
+    LaunchedEffect(imageUrl) {
+        Thread {
+            try {
+                val conn = (java.net.URL(imageUrl).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 6000
+                    readTimeout = 10000
+                }
+                if (conn.responseCode in 200..299) {
+                    val bmp = conn.inputStream.use { BitmapFactory.decodeStream(it) }
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { image = bmp }
+                } else android.os.Handler(android.os.Looper.getMainLooper()).post { failed = true }
+            } catch (_: Exception) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post { failed = true }
+            }
+        }.start()
+    }
+    when {
+        image != null -> androidx.compose.foundation.Image(image!!.asImageBitmap(),"Kvitteringsfoto",Modifier.fillMaxWidth().heightIn(max=420.dp),contentScale=ContentScale.Fit)
+        failed -> Text("Kunne ikke hente kvitteringsbilledet.",style=MaterialTheme.typography.bodySmall)
+        else -> Box(Modifier.fillMaxWidth().height(120.dp),contentAlignment=Alignment.Center){CircularProgressIndicator()}
+    }
+}
+
 private fun ReceiptScreen() {
     val context=androidx.compose.ui.platform.LocalContext.current
     val (url,token)=rememberConnection()
@@ -524,7 +551,7 @@ private fun ReceiptScreen() {
                     Text(r.description)
                     Text("${r.amount} kr. · ${r.status}")
                     if(r.imageUrl.isNotBlank()) {
-                        Text("Kvitteringsbilledet er gemt på serveren.",style=MaterialTheme.typography.bodySmall)
+                        ReceiptImage(r.imageUrl)
                     } else {
                         Text("Billedet er gemt, men serveren sender endnu ikke billedadressen tilbage til appen.",style=MaterialTheme.typography.bodySmall)
                     }
