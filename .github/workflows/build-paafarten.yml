@@ -3,7 +3,8 @@ name: Build På farten Android
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
   build:
@@ -22,30 +23,37 @@ jobs:
           java-version: "17"
 
       - name: Find Android SDK tools
+        shell: bash
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager 2>/dev/null | head -n 1)
           if [ -z "$SDKMANAGER" ]; then
             echo "sdkmanager blev ikke fundet i $ANDROID_HOME"
-            find "$ANDROID_HOME" -maxdepth 4 -type f -name sdkmanager -print || true
             exit 1
           fi
           echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
           echo "Fandt sdkmanager: $SDKMANAGER"
 
       - name: Accepter Android licenser
-        run: yes | "$SDKMANAGER" --licenses >/dev/null || true
+        shell: bash
+        run: |
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
 
       - name: Installer Android 16 SDK
-        run: "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+        shell: bash
+        run: |
+          "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Installer Gradle 8.13
+        shell: bash
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.13-bin.zip
           unzip -q gradle-8.13-bin.zip
           echo "$PWD/gradle-8.13/bin" >> "$GITHUB_PATH"
 
       - name: Byg debug APK
-        run: gradle --no-daemon :app:assembleDebug
+        shell: bash
+        run: |
+          gradle --no-daemon :app:assembleDebug
 
       - name: Gem APK
         uses: actions/upload-artifact@v4
