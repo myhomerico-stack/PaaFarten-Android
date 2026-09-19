@@ -25,6 +25,22 @@ android {
         jvmTarget = "17"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = System.getenv("PAAFARTEN_KEYSTORE_FILE")?.let { file(it) }
+            storePassword = System.getenv("PAAFARTEN_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("PAAFARTEN_KEY_ALIAS")
+            keyPassword = System.getenv("PAAFARTEN_KEY_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
     buildFeatures { compose = true }
 
     packaging {
