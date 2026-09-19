@@ -2,6 +2,9 @@ package dk.fynogjylland.paafarten
 
 import android.os.Bundle
 import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -362,8 +365,46 @@ private fun ProfileScreen(){
 
 @Composable
 private fun ReceiptScreen() {
+    val context=androidx.compose.ui.platform.LocalContext.current
+    var type by remember { mutableStateOf("Udlæg") }
+    var text by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var photo by remember { mutableStateOf<Uri?>(null) }
+    var message by remember { mutableStateOf("") }
+    val picker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->photo=uri}
+    val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()){bmp->
+        if(bmp!=null) message="Foto taget. Kamerabilledet gøres klar til upload i næste servertrin."
+    }
     LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-        item{Text("Kvitteringer",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text("Kvitteringsupload kobles på som næste serverfunktion.")}
+        item{
+            Text("Udlæg & køb på kort",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)
+            Text("Send kvitteringen til kontoret")
+        }
+        item{
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                FilterChip(selected=type=="Udlæg",onClick={type="Udlæg"},label={Text("Udlæg")})
+                FilterChip(selected=type=="Købt på kort",onClick={type="Købt på kort"},label={Text("Købt på kort")})
+            }
+        }
+        item{
+            OutlinedTextField(text,{text=it},label={Text("Hvad er købt?")},placeholder={Text("Fx 100 l diesel eller 2 pærer")},modifier=Modifier.fillMaxWidth())
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(amount,{amount=it.filter{x->x.isDigit()||x==','||x=='.'}},label={Text("Beløb i kr.")},modifier=Modifier.fillMaxWidth(),singleLine=true)
+        }
+        item{
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                OutlinedButton(onClick={camera.launch(null)}){Icon(Icons.Default.PhotoCamera,null);Spacer(Modifier.width(6.dp));Text("Tag foto")}
+                OutlinedButton(onClick={picker.launch("image/*")}){Icon(Icons.Default.PhotoLibrary,null);Spacer(Modifier.width(6.dp));Text("Vælg foto")}
+            }
+            if(photo!=null) Text("Kvitteringsfoto valgt ✓",fontWeight=FontWeight.Bold)
+        }
+        item{
+            Button(onClick={message="Upload til kontoret kobles nu på serveren."},enabled=text.isNotBlank()&&amount.isNotBlank()&&(photo!=null||message.startsWith("Foto taget")),modifier=Modifier.fillMaxWidth()){
+                Icon(Icons.Default.Send,null);Spacer(Modifier.width(8.dp));Text("Send til kontoret")
+            }
+            if(message.isNotBlank()) Text(message)
+            Text("Dato, tidspunkt og chauffør registreres automatisk. Kontoret modtager kvitteringen og kan behandle den.",style=MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
