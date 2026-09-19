@@ -55,9 +55,18 @@ jobs:
         run: |
           gradle --no-daemon :app:assembleDebug
 
-      - name: Gem APK
+      - name: Klargør update-filer
+        shell: bash
+        run: |
+          mkdir -p update-package
+          cp app/build/outputs/apk/debug/app-debug.apk update-package/paafarten.apk
+          cp server-update/update.json update-package/update.json
+          echo "Update-pakken indeholder:"
+          ls -la update-package
+
+      - name: Gem update-pakke
         uses: actions/upload-artifact@v4
         with:
-          name: PaaFarten-Android-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: PaaFarten-Update
+          path: update-package/
           if-no-files-found: error
