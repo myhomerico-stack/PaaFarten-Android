@@ -85,28 +85,58 @@ fun PaaFartenApp() {
 
 @Composable
 private fun LoginScreen(onLogin: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { context.getSharedPreferences("paafarten_server", Context.MODE_PRIVATE) }
     var showServer by remember { mutableStateOf(false) }
+    var email by remember { mutableStateOf("") }
+    var pin by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+
     if (showServer) {
         ServerSettingsScreen { showServer = false }
         return
     }
-    var user by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+
     Surface(Modifier.fillMaxSize()) {
-        Column(
-            Modifier.fillMaxSize().padding(28.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
+        Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center) {
             Text("På farten", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-            Text("Chauffør & medarbejder", style = MaterialTheme.typography.titleMedium)
+            Text("Chauffør-login", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(28.dp))
-            OutlinedTextField(user, { user = it }, label = { Text("Brugernavn") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(email, { email = it }, label = { Text("E-mail") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Spacer(Modifier.height(12.dp))
-            OutlinedTextField(password, { password = it }, label = { Text("Adgangskode") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(20.dp))
-            Button(onClick = onLogin, enabled = user.isNotBlank() && password.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-                Text("Log ind")
+            OutlinedTextField(
+                pin, { pin = it },
+                label = { Text("PIN") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+            )
+            if (error.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                Text(error, color = MaterialTheme.colorScheme.error)
             }
+            Spacer(Modifier.height(20.dp))
+            Button(
+                onClick = {
+                    busy = true
+                    error = ""
+                    val apiUrl = prefs.getString("api_url", "") ?: ""
+                    ApiClient.login(apiUrl, email.trim(), pin) { result ->
+                        busy = false
+                        if (result.ok) {
+                            context.getSharedPreferences("paafarten_login", Context.MODE_PRIVATE).edit()
+                                .putString("token", result.token)
+                                .putString("driver_name", result.name)
+                                .putString("driver_email", email.trim())
+                                .apply()
+                            onLogin()
+                        } else error = result.message
+                    }
+                },
+                enabled = !busy && email.isNotBlank() && pin.isNotBlank(),
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (busy) "Logger ind…" else "Log ind") }
             Spacer(Modifier.height(10.dp))
             OutlinedButton(onClick = { showServer = true }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.Settings, null)
@@ -114,11 +144,10 @@ private fun LoginScreen(onLogin: () -> Unit) {
                 Text("Serverindstillinger")
             }
             Spacer(Modifier.height(12.dp))
-            Text("Serveroplysninger gemmes kun lokalt på telefonen og lægges ikke i GitHub.", style = MaterialTheme.typography.bodySmall)
+            Text("Bruger samme e-mail og PIN som chaufførsiden.", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
-
 private val demoShifts = listOf(
     Shift("I dag", "06:45", "15:30", "Vagtplan", listOf("06:45 Mød på garage", "07:00 Klargør bus", "07:30 Kørsel", "12:15 Pause", "15:15 Retur til garage", "15:30 Vagt slut")),
     Shift("Mandag 21/9", "07:00", "16:00", "Vagtplan", listOf("07:00 Mød på garage", "07:30 Kørsel", "16:00 Vagt slut")),
@@ -317,11 +346,7 @@ private fun HoursScreen() {
 private fun ServerSettingsScreen(onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { context.getSharedPreferences("paafarten_server", Context.MODE_PRIVATE) }
-    var host by remember { mutableStateOf(prefs.getString("host", "") ?: "") }
-    var port by remember { mutableStateOf(prefs.getString("port", "3306") ?: "3306") }
-    var database by remember { mutableStateOf(prefs.getString("database", "") ?: "") }
-    var username by remember { mutableStateOf(prefs.getString("username", "") ?: "") }
-    var password by remember { mutableStateOf(prefs.getString("password", "") ?: "") }
+    var apiUrl by remember { mutableStateOf(prefs.getString("api_url", "https://fynogjylland.dk/minside/api/") ?: "") }
     var saved by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -332,49 +357,22 @@ private fun ServerSettingsScreen(onBack: () -> Unit) {
             )
         }
     ) { padding ->
-        LazyColumn(
-            Modifier.fillMaxSize().padding(padding).padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                Text("MySQL-server", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Indstillingerne gemmes lokalt på denne telefon. Adgangskoden bliver ikke skrevet ind i kildekoden eller GitHub.")
-            }
-            item { OutlinedTextField(host, { host = it }, label = { Text("Server / host") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
-            item { OutlinedTextField(port, { port = it }, label = { Text("Port") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
-            item { OutlinedTextField(database, { database = it }, label = { Text("Database") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
-            item { OutlinedTextField(username, { username = it }, label = { Text("Bruger") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
-            item {
-                OutlinedTextField(
-                    password, { password = it },
-                    label = { Text("Kodeord") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-                )
-            }
-            item {
-                Button(
-                    onClick = {
-                        prefs.edit()
-                            .putString("host", host.trim())
-                            .putString("port", port.trim())
-                            .putString("database", database.trim())
-                            .putString("username", username.trim())
-                            .putString("password", password)
-                            .apply()
-                        saved = true
-                    },
-                    enabled = host.isNotBlank() && port.isNotBlank() && database.isNotBlank() && username.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Gem serverindstillinger") }
-            }
-            if (saved) item {
-                AssistChip(onClick = {}, label = { Text("Serverindstillinger er gemt på telefonen") }, leadingIcon = { Icon(Icons.Default.CheckCircle, null) })
-            }
-            item {
-                Text("Bemærk: Den endelige app bør forbinde til en sikker HTTPS-API på WWW-serveren i stedet for at åbne MySQL direkte mod internettet. Denne menu kan stadig bruges til serveropsætningen.", style = MaterialTheme.typography.bodySmall)
-            }
+        Column(Modifier.fillMaxSize().padding(padding).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("På farten-server", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Appen forbinder via HTTPS. MySQL-bruger og kodeord ligger kun på webserveren og ikke i appen.")
+            OutlinedTextField(apiUrl, { apiUrl = it }, label = { Text("API-adresse") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Button(
+                onClick = {
+                    var u = apiUrl.trim()
+                    if (u.isNotBlank() && !u.endsWith("/")) u += "/"
+                    prefs.edit().putString("api_url", u).apply()
+                    apiUrl = u
+                    saved = true
+                },
+                enabled = apiUrl.startsWith("https://"),
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Gem serverindstillinger") }
+            if (saved) Text("Serverindstillinger er gemt på telefonen.")
         }
     }
 }
