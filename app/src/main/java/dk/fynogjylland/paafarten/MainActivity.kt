@@ -513,6 +513,7 @@ private fun ProfileScreen(){
 }
 @Composable private fun ProfileLine(label:String,value:String){Column{Text(label,style=MaterialTheme.typography.labelMedium);Text(if(value.isBlank()) "Ikke oplyst" else value,fontWeight=FontWeight.Medium)}}
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AbsencePanel(){
     val (url,token)=rememberConnection()
