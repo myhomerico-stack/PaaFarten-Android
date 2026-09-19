@@ -211,3 +211,16 @@ fun ApiClient.sendAbsence(baseUrl:String,token:String,kind:String,from:String,to
         Handler(Looper.getMainLooper()).post{callback(r)}
     }.start()
 }
+
+
+data class ApiAbsence(val id:Int,val kind:String,val from:String,val to:String,val note:String,val status:String)
+fun ApiClient.absences(baseUrl:String,token:String,from:String,to:String,callback:(Result<List<ApiAbsence>>)->Unit){
+    Thread {
+        val r=runCatching {
+            val j=authGet(baseUrl,token,"absences.php?from="+URLEncoder.encode(from,"UTF-8")+"&to="+URLEncoder.encode(to,"UTF-8"))
+            val a=j.getJSONArray("requests")
+            (0 until a.length()).map{i->val x=a.getJSONObject(i);ApiAbsence(x.optInt("id"),x.optString("kind"),x.optString("from"),x.optString("to"),x.optString("note"),x.optString("status","Ansøgt"))}
+        }
+        Handler(Looper.getMainLooper()).post{callback(r)}
+    }.start()
+}
