@@ -440,23 +440,45 @@ private fun ReceiptScreen() {
     var amount by remember { mutableStateOf("") }
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
-    var receipts by remember { mutableStateOf<List<ApiReceipt>?>(null) }
+    val receiptPrefs=remember { context.getSharedPreferences("paafarten_receipts",Context.MODE_PRIVATE) }
+    fun readCachedReceipts():List<ApiReceipt> = runCatching {
+        val a=org.json.JSONArray(receiptPrefs.getString("items","[]"))
+        (0 until a.length()).map { i ->
+            val x=a.getJSONObject(i)
+            ApiReceipt(x.optInt("id"),x.optString("type"),x.optString("description"),x.optString("amount"),x.optString("created_at"),x.optString("status","Ny"),x.optString("image_url"))
+        }
+    }.getOrDefault(emptyList())
+    fun saveCachedReceipts(list:List<ApiReceipt>) {
+        val a=org.json.JSONArray()
+        list.take(100).forEach { r ->
+            a.put(org.json.JSONObject().apply {
+                put("id",r.id); put("type",r.type); put("description",r.description); put("amount",r.amount)
+                put("created_at",r.createdAt); put("status",r.status); put("image_url",r.imageUrl)
+            })
+        }
+        receiptPrefs.edit().putString("items",a.toString()).apply()
+    }
+    fun mergeReceipts(a:List<ApiReceipt>,b:List<ApiReceipt>) =
+        (a+b).distinctBy { x -> if(x.id>0) "id:${x.id}" else "${x.createdAt}|${x.type}|${x.description}|${x.amount}" }
+            .sortedByDescending { it.createdAt }
+
+    var receipts by remember { mutableStateOf<List<ApiReceipt>?>(readCachedReceipts()) }
     var message by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var selectedReceipt by remember { mutableStateOf<ApiReceipt?>(null) }
 
-    fun loadHistory(preserveExisting:Boolean=false){ ApiClient.receipts(url,token){
-        it.onSuccess{r->
-            receipts = if(preserveExisting) {
-                val local=receipts ?: emptyList()
-                (local+r).distinctBy { x -> if(x.id>0) "id:${x.id}" else "${x.createdAt}|${x.type}|${x.description}|${x.amount}" }
-            } else r
+    fun loadHistory(preserveExisting:Boolean=true){ ApiClient.receipts(url,token){
+        it.onSuccess{server->
+            val local=if(preserveExisting) (receipts ?: readCachedReceipts()) else emptyList()
+            val merged=mergeReceipts(server,local)
+            receipts=merged
+            saveCachedReceipts(merged)
         }.onFailure{e->
-            if(receipts==null) receipts=emptyList()
+            if(receipts==null) receipts=readCachedReceipts()
             message="Historik kunne ikke hentes: "+(e.message?:"serverfejl")
         }
     } }
-    LaunchedEffect(token){ loadHistory() }
+    LaunchedEffect(token){ loadHistory(true) }
 
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->
         if(uri!=null) runCatching {
@@ -513,7 +535,9 @@ private fun ReceiptScreen() {
                 ApiClient.uploadReceipt(url,token,type,description,amount,img){r->
                     busy=false
                     r.onSuccess { saved->
-                        receipts=listOf(saved)+(receipts?:emptyList())
+                        val updated=mergeReceipts(listOf(saved),receipts?:emptyList())
+                        receipts=updated
+                        saveCachedReceipts(updated)
                         message="Kvitteringen er sendt til kontoret og gemt."
                         description=""; amount=""; bitmap=null
                         loadHistory(preserveExisting=true)
