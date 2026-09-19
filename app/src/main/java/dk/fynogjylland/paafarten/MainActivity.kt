@@ -49,7 +49,9 @@ private data class Receipt(val type: String, val text: String, val amount: Strin
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaaFartenApp() {
-    var loggedIn by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val loginPrefs = remember { context.getSharedPreferences("paafarten_login", Context.MODE_PRIVATE) }
+    var loggedIn by remember { mutableStateOf(!loginPrefs.getString("token","").isNullOrBlank()) }
     var selected by remember { mutableIntStateOf(0) }
 
     val companyColors = lightColorScheme(
@@ -89,7 +91,7 @@ fun PaaFartenApp() {
                             Text("På farten", fontWeight = FontWeight.Bold)
                         }
                     },
-                    actions = { IconButton(onClick = { loggedIn = false }) { Icon(Icons.Default.Logout, "Log ud") } }
+                    actions = { IconButton(onClick = { loginPrefs.edit().clear().apply(); loggedIn = false }) { Icon(Icons.Default.Logout, "Log ud") } }
                 )
             },
             bottomBar = {
@@ -121,18 +123,12 @@ fun PaaFartenApp() {
 @Composable
 private fun LoginScreen(onLogin: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val prefs = remember { context.getSharedPreferences("paafarten_server", Context.MODE_PRIVATE) }
-    var showServer by remember { mutableStateOf(false) }
+    val apiUrl = "https://minside.fynogjylland.dk/api/"
     var email by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    var selectedReceipt by remember { mutableStateOf<ApiReceipt?>(null) }
     var error by remember { mutableStateOf("") }
 
-    if (showServer) {
-        ServerSettingsScreen { showServer = false }
-        return
-    }
 
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center) {
@@ -164,7 +160,6 @@ private fun LoginScreen(onLogin: () -> Unit) {
                 onClick = {
                     busy = true
                     error = ""
-                    val apiUrl = prefs.getString("api_url", "") ?: ""
                     ApiClient.login(apiUrl, email.trim(), pin) { result ->
                         busy = false
                         if (result.ok) {
@@ -180,12 +175,6 @@ private fun LoginScreen(onLogin: () -> Unit) {
                 enabled = !busy && email.isNotBlank() && pin.isNotBlank(),
                 modifier = Modifier.fillMaxWidth()
             ) { Text(if (busy) "Logger ind…" else "Log ind") }
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = { showServer = true }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Settings, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Serverindstillinger")
-            }
             Spacer(Modifier.height(12.dp))
             Text("Bruger samme e-mail og PIN som chaufførsiden.", style = MaterialTheme.typography.bodySmall)
         }
@@ -195,10 +184,8 @@ private fun LoginScreen(onLogin: () -> Unit) {
 @Composable
 private fun rememberConnection(): Pair<String,String> {
     val context=androidx.compose.ui.platform.LocalContext.current
-    val server=remember { context.getSharedPreferences("paafarten_server",Context.MODE_PRIVATE) }
     val login=remember { context.getSharedPreferences("paafarten_login",Context.MODE_PRIVATE) }
-    return (server.getString("api_url","https://minside.fynogjylland.dk/api/") ?: "https://minside.fynogjylland.dk/api/") to
-        (login.getString("token","") ?: "")
+    return "https://minside.fynogjylland.dk/api/" to (login.getString("token","") ?: "")
 }
 private fun mins(v:Int)=if(v<=0) "0 t." else "${v/60} t. ${v%60} min."
 private fun clock(v:String):String {
@@ -366,14 +353,30 @@ private fun HoursScreen(){
 private fun ProfileScreen(){
     val (url,token)=rememberConnection()
     var p by remember { mutableStateOf<ApiProfile?>(null) }
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
-    LaunchedEffect(token){ApiClient.profile(url,token){it.onSuccess{x->p=x}.onFailure{e->error=e.message?:"Serverfejl"}}}
+    var message by remember { mutableStateOf("") }
+    var saving by remember { mutableStateOf(false) }
+    LaunchedEffect(token){ApiClient.profile(url,token){it.onSuccess{x->p=x;name=x.name;phone=x.phone}.onFailure{e->error=e.message?:"Serverfejl"}}}
     LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
         item{Icon(Icons.Default.AccountCircle,null,Modifier.size(72.dp));Text("Min profil",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)}
         if(error.isNotBlank()) item{Text(error,color=MaterialTheme.colorScheme.error)}
         else if(p==null) item{CircularProgressIndicator()}
-        else item{ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-            ProfileLine("Navn",p!!.name); ProfileLine("Telefon",p!!.phone); ProfileLine("E-mail",p!!.email)
+        else item{ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
+            OutlinedTextField(name,{name=it},label={Text("Navn")},modifier=Modifier.fillMaxWidth(),singleLine=true)
+            OutlinedTextField(phone,{phone=it},label={Text("Telefon")},modifier=Modifier.fillMaxWidth(),singleLine=true)
+            OutlinedTextField(p!!.email,{},label={Text("E-mail")},modifier=Modifier.fillMaxWidth(),singleLine=true,readOnly=true,
+                supportingText={Text("E-mail kan ikke ændres i appen.")})
+            Button(onClick={
+                saving=true;message=""
+                ApiClient.updateProfile(url,token,name.trim(),phone.trim()){r->
+                    saving=false
+                    r.onSuccess { updated->p=updated;name=updated.name;phone=updated.phone;message="Oplysningerne er gemt." }
+                     .onFailure { message=it.message?:"Kunne ikke gemme oplysningerne." }
+                }
+            },enabled=!saving&&name.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text(if(saving)"Gemmer…" else "Gem ændringer")}
+            if(message.isNotBlank()) Text(message)
         }}}
     }
 }
