@@ -3,6 +3,10 @@ package dk.fynogjylland.paafarten
 import android.os.Bundle
 import android.content.Context
 import android.net.Uri
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.provider.MediaStore
+import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
@@ -22,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
@@ -366,19 +371,31 @@ private fun ProfileScreen(){
 @Composable
 private fun ReceiptScreen() {
     val context=androidx.compose.ui.platform.LocalContext.current
+    val (url,token)=rememberConnection()
     var type by remember { mutableStateOf("Udlæg") }
-    var text by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
-    var photo by remember { mutableStateOf<Uri?>(null) }
+    var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var receipts by remember { mutableStateOf<List<ApiReceipt>?>(null) }
     var message by remember { mutableStateOf("") }
-    val picker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->photo=uri}
-    val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()){bmp->
-        if(bmp!=null) message="Foto taget. Kamerabilledet gøres klar til upload i næste servertrin."
+    var busy by remember { mutableStateOf(false) }
+
+    fun loadHistory(){ ApiClient.receipts(url,token){it.onSuccess{r->receipts=r}.onFailure{e->message=e.message?:"Kunne ikke hente historik"}} }
+    LaunchedEffect(token){ loadHistory() }
+
+    val picker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->
+        if(uri!=null) runCatching {
+            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+        }.onSuccess { bitmap=it; message="" }.onFailure { message="Kunne ikke åbne billedet." }
     }
+    val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()){bmp->
+        if(bmp!=null){ bitmap=bmp; message="" }
+    }
+
     LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
         item{
             Text("Udlæg & køb på kort",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)
-            Text("Send kvitteringen til kontoret")
+            Text("Kvitteringen sendes til kontoret og gemmes på din profil.")
         }
         item{
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
@@ -387,7 +404,7 @@ private fun ReceiptScreen() {
             }
         }
         item{
-            OutlinedTextField(text,{text=it},label={Text("Hvad er købt?")},placeholder={Text("Fx 100 l diesel eller 2 pærer")},modifier=Modifier.fillMaxWidth())
+            OutlinedTextField(description,{description=it},label={Text("Hvad er købt?")},placeholder={Text("Fx 100 l diesel eller 2 pærer")},modifier=Modifier.fillMaxWidth())
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(amount,{amount=it.filter{x->x.isDigit()||x==','||x=='.'}},label={Text("Beløb i kr.")},modifier=Modifier.fillMaxWidth(),singleLine=true)
         }
@@ -396,14 +413,36 @@ private fun ReceiptScreen() {
                 OutlinedButton(onClick={camera.launch(null)}){Icon(Icons.Default.PhotoCamera,null);Spacer(Modifier.width(6.dp));Text("Tag foto")}
                 OutlinedButton(onClick={picker.launch("image/*")}){Icon(Icons.Default.PhotoLibrary,null);Spacer(Modifier.width(6.dp));Text("Vælg foto")}
             }
-            if(photo!=null) Text("Kvitteringsfoto valgt ✓",fontWeight=FontWeight.Bold)
+            bitmap?.let { img ->
+                Spacer(Modifier.height(10.dp))
+                androidx.compose.foundation.Image(img.asImageBitmap(),"Kvittering",Modifier.fillMaxWidth().heightIn(max=260.dp),contentScale=ContentScale.Fit)
+            }
         }
         item{
-            Button(onClick={message="Upload til kontoret kobles nu på serveren."},enabled=text.isNotBlank()&&amount.isNotBlank()&&(photo!=null||message.startsWith("Foto taget")),modifier=Modifier.fillMaxWidth()){
-                Icon(Icons.Default.Send,null);Spacer(Modifier.width(8.dp));Text("Send til kontoret")
+            Button(onClick={
+                val img=bitmap ?: return@Button
+                busy=true; message=""
+                ApiClient.uploadReceipt(url,token,type,description,amount,img){r->
+                    busy=false
+                    r.onSuccess { message="Kvitteringen er sendt til kontoret."; description=""; amount=""; bitmap=null; loadHistory() }
+                     .onFailure { message=it.message?:"Kunne ikke sende kvitteringen." }
+                }
+            },enabled=!busy&&description.isNotBlank()&&amount.isNotBlank()&&bitmap!=null,modifier=Modifier.fillMaxWidth()){
+                Icon(Icons.Default.Send,null);Spacer(Modifier.width(8.dp));Text(if(busy)"Sender…" else "Send til kontoret")
             }
             if(message.isNotBlank()) Text(message)
-            Text("Dato, tidspunkt og chauffør registreres automatisk. Kontoret modtager kvitteringen og kan behandle den.",style=MaterialTheme.typography.bodySmall)
+        }
+        item{Text("Mine indsendte kvitteringer",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)}
+        when {
+            receipts==null -> item{CircularProgressIndicator()}
+            receipts!!.isEmpty() -> item{Text("Du har endnu ikke indsendt kvitteringer.")}
+            else -> items(receipts!!){r->
+                ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(14.dp)){
+                    Text("${r.createdAt} · ${r.type}",fontWeight=FontWeight.Bold)
+                    Text(r.description)
+                    Text("${r.amount} kr. · ${r.status}")
+                }}
+            }
         }
     }
 }
