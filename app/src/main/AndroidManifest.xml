@@ -10,6 +10,13 @@
         android:label="På farten"
         android:supportsRtl="true"
         android:theme="@style/Theme.PaaFarten">
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="dk.fynogjylland.paafarten.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true">
