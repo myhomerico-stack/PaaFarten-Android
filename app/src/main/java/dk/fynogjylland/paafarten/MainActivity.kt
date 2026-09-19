@@ -211,7 +211,7 @@ private fun LoginScreen(onLogin: () -> Unit) {
                 ) {
                     androidx.compose.foundation.Image(
                         painter = painterResource(R.drawable.company_logo),
-                        contentDescription = "Farhusser Fyn & Jylland",
+                        contentDescription = "Barbussen Fyn & Jylland",
                         modifier = Modifier.size(118.dp).padding(12.dp),
                         contentScale = ContentScale.Fit
                     )
@@ -302,7 +302,7 @@ private fun LoginScreen(onLogin: () -> Unit) {
                 }
                 Spacer(Modifier.height(18.dp))
                 Text(
-                    "Farhusser Fyn & Jylland",
+                    "Barbussen Fyn & Jylland",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
