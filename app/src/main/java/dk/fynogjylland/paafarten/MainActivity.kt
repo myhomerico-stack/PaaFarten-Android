@@ -351,6 +351,7 @@ private fun ShiftCalendarScreen() {
     val (url,token)=rememberConnection()
     var month by remember { mutableStateOf(YearMonth.now()) }
     var shifts by remember { mutableStateOf<List<ApiShift>?>(null) }
+    var absences by remember { mutableStateOf<List<ApiAbsence>>(emptyList()) }
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
     var error by remember { mutableStateOf("") }
     var showAbsence by remember { mutableStateOf(false) }
@@ -358,6 +359,9 @@ private fun ShiftCalendarScreen() {
         shifts=null; error=""; selectedDay=null
         ApiClient.shifts(url,token,month.atDay(1).toString(),month.atEndOfMonth().toString()){
             it.onSuccess{x->shifts=x}.onFailure{e->error=e.message?:"Serverfejl"}
+        }
+        ApiClient.absences(url,token,month.atDay(1).toString(),month.atEndOfMonth().toString()){
+            it.onSuccess{x->absences=x}
         }
     }
     LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
@@ -379,7 +383,7 @@ private fun ShiftCalendarScreen() {
             error.isNotBlank()->item{Text(error,color=MaterialTheme.colorScheme.error)}
             shifts==null->item{CircularProgressIndicator()}
             else -> {
-                item { MonthCalendar(month,shifts!!,selectedDay){selectedDay=it} }
+                item { MonthCalendar(month,shifts!!,absences,selectedDay){selectedDay=it} }
                 val dayShifts=selectedDay?.let{d->shifts!!.filter{x->x.date.take(10)==d.toString()}} ?: emptyList()
                 if(selectedDay!=null) {
                     item { Text(selectedDay.toString(),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
@@ -391,8 +395,9 @@ private fun ShiftCalendarScreen() {
     }
 }
 @Composable
-private fun MonthCalendar(month:YearMonth, shifts:List<ApiShift>, selected:LocalDate?, onDay:(LocalDate)->Unit){
+private fun MonthCalendar(month:YearMonth, shifts:List<ApiShift>, absences:List<ApiAbsence>, selected:LocalDate?, onDay:(LocalDate)->Unit){
     val shiftDates=shifts.mapNotNull{runCatching{LocalDate.parse(it.date.take(10))}.getOrNull()}.toSet()
+    fun absenceOn(d:LocalDate)=absences.firstOrNull{runCatching{d>=LocalDate.parse(it.from)&&d<=LocalDate.parse(it.to)}.getOrDefault(false)}
     val first=month.atDay(1)
     val offset=first.dayOfWeek.value-1
     val cells=offset+month.lengthOfMonth()
@@ -405,7 +410,7 @@ private fun MonthCalendar(month:YearMonth, shifts:List<ApiShift>, selected:Local
                         val n=week*7+dow-offset+1
                         if(n !in 1..month.lengthOfMonth()) Spacer(Modifier.weight(1f).height(64.dp))
                         else {
-                            val d=month.atDay(n); val has=shiftDates.contains(d)
+                            val d=month.atDay(n); val has=shiftDates.contains(d); val absence=absenceOn(d)
                             Surface(
                                 modifier=Modifier.weight(1f).height(64.dp).padding(2.dp).clickable{onDay(d)},
                                 shape=RoundedCornerShape(8.dp),
@@ -413,7 +418,8 @@ private fun MonthCalendar(month:YearMonth, shifts:List<ApiShift>, selected:Local
                             ){
                                 Column(Modifier.padding(6.dp)){
                                     Text(n.toString(),fontWeight=if(has) FontWeight.Bold else FontWeight.Normal)
-                                    if(has){ Spacer(Modifier.height(4.dp)); Text("Vagt",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold) }
+                                    if(has){ Spacer(Modifier.height(2.dp)); Text("Vagt",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold) }
+                                    if(absence!=null){ Text("${absence.kind} · ${absence.status}",style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.Bold) }
                                 }
                             }
                         }
