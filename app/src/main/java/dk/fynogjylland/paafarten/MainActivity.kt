@@ -191,55 +191,123 @@ private fun LoginScreen(onLogin: () -> Unit) {
     var pin by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    var showPin by remember { mutableStateOf(false) }
 
-
-    Surface(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center) {
-            androidx.compose.foundation.Image(
-                painter = painterResource(R.drawable.company_logo),
-                contentDescription = "Farhusser Fyn & Jylland",
-                modifier = Modifier.fillMaxWidth().height(180.dp),
-                contentScale = ContentScale.Fit
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier.fillMaxWidth().height(260.dp)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
             )
-            Spacer(Modifier.height(10.dp))
-            Text("På farten", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-            Text("Chauffør & medarbejder", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(28.dp))
-            OutlinedTextField(email, { email = it }, label = { Text("E-mail") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                pin, { pin = it },
-                label = { Text("PIN") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-            )
-            if (error.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Text(error, color = MaterialTheme.colorScheme.error)
-            }
-            Spacer(Modifier.height(20.dp))
-            Button(
-                onClick = {
-                    busy = true
-                    error = ""
-                    ApiClient.login(apiUrl, email.trim(), pin) { result ->
-                        busy = false
-                        if (result.ok) {
-                            context.getSharedPreferences("paafarten_login", Context.MODE_PRIVATE).edit()
-                                .putString("token", result.token)
-                                .putString("driver_name", result.name)
-                                .putString("driver_email", email.trim())
-                                .apply()
-                            onLogin()
-                        } else error = result.message
+            Column(
+                Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(Modifier.height(54.dp))
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    tonalElevation = 3.dp,
+                    shadowElevation = 8.dp
+                ) {
+                    androidx.compose.foundation.Image(
+                        painter = painterResource(R.drawable.company_logo),
+                        contentDescription = "Farhusser Fyn & Jylland",
+                        modifier = Modifier.size(118.dp).padding(12.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+                Spacer(Modifier.height(18.dp))
+                Text("På farten", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    "Chauffør & medarbejder",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(28.dp))
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text("Velkommen", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("Log ind for at se vagtplan, timer og kvitteringer.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedTextField(
+                            value = email,
+                            onValueChange = { email = it },
+                            label = { Text("E-mail") },
+                            leadingIcon = { Icon(Icons.Default.Email, null) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        OutlinedTextField(
+                            value = pin,
+                            onValueChange = { pin = it },
+                            label = { Text("PIN") },
+                            leadingIcon = { Icon(Icons.Default.Lock, null) },
+                            trailingIcon = {
+                                IconButton(onClick = { showPin = !showPin }) {
+                                    Icon(if (showPin) Icons.Default.VisibilityOff else Icons.Default.Visibility, if (showPin) "Skjul PIN" else "Vis PIN")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            visualTransformation = if (showPin) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation()
+                        )
+                        if (error.isNotBlank()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.ErrorOutline, null, tint = MaterialTheme.colorScheme.error)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(error, color = MaterialTheme.colorScheme.onErrorContainer)
+                                }
+                            }
+                        }
+                        Button(
+                            onClick = {
+                                busy = true
+                                error = ""
+                                ApiClient.login(apiUrl, email.trim(), pin) { result ->
+                                    busy = false
+                                    if (result.ok) {
+                                        context.getSharedPreferences("paafarten_login", Context.MODE_PRIVATE).edit()
+                                            .putString("token", result.token)
+                                            .putString("driver_name", result.name)
+                                            .putString("driver_email", email.trim())
+                                            .apply()
+                                        onLogin()
+                                    } else error = result.message
+                                }
+                            },
+                            enabled = !busy && email.isNotBlank() && pin.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth().height(54.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            if (busy) {
+                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(10.dp))
+                                Text("Logger ind…")
+                            } else {
+                                Icon(Icons.Default.Login, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Log ind", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
-                },
-                enabled = !busy && email.isNotBlank() && pin.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(if (busy) "Logger ind…" else "Log ind") }
-            Spacer(Modifier.height(12.dp))
-            Text("Bruger samme e-mail og PIN som chaufførsiden.", style = MaterialTheme.typography.bodySmall)
+                }
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    "Farhusser Fyn & Jylland",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text("Sikker adgang til På farten", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
