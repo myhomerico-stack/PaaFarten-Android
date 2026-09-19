@@ -218,12 +218,6 @@ private fun TodayScreen() {
     }
     LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
         item { Text("I dag",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold) }
-        item {
-            OutlinedButton(onClick={showAbsence=!showAbsence},modifier=Modifier.fillMaxWidth()){
-                Icon(Icons.Default.EventAvailable,null); Spacer(Modifier.width(8.dp)); Text("Fri / ferie / sygemelding")
-            }
-            if(showAbsence) AbsencePanel()
-        }
         when {
             error.isNotBlank()->item{Text(error,color=MaterialTheme.colorScheme.error)}
             shifts==null->item{CircularProgressIndicator()}
@@ -254,6 +248,12 @@ private fun ShiftCalendarScreen() {
                 Text("${month.month.name.lowercase().replaceFirstChar{it.uppercase()}} ${month.year}",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
                 IconButton(onClick={month=month.plusMonths(1)}){Icon(Icons.Default.ChevronRight,null)}
             }
+        }
+        item {
+            OutlinedButton(onClick={showAbsence=!showAbsence},modifier=Modifier.fillMaxWidth()){
+                Icon(Icons.Default.EventAvailable,null); Spacer(Modifier.width(8.dp)); Text("Fri / ferie / sygemelding")
+            }
+            if(showAbsence) AbsencePanel()
         }
         when {
             error.isNotBlank()->item{Text(error,color=MaterialTheme.colorScheme.error)}
