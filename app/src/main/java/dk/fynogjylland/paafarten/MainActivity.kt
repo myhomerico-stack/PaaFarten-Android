@@ -53,6 +53,8 @@ fun PaaFartenApp() {
     val loginPrefs = remember { context.getSharedPreferences("paafarten_login", Context.MODE_PRIVATE) }
     var loggedIn by remember { mutableStateOf(!loginPrefs.getString("token","").isNullOrBlank()) }
     var selected by remember { mutableIntStateOf(0) }
+    var startupUpdate by remember { mutableStateOf<AppUpdate?>(null) }
+    var updateChecked by remember { mutableStateOf(false) }
 
     val companyColors = lightColorScheme(
         primary = Color(0xFFD99A00),
@@ -68,12 +70,30 @@ fun PaaFartenApp() {
             return@MaterialTheme
         }
 
+        LaunchedEffect(loggedIn) {
+            if (loggedIn && !updateChecked) {
+                updateChecked = true
+                UpdateManager.check(context) { it.onSuccess { u -> startupUpdate = u } }
+            }
+        }
+
+        startupUpdate?.let { u ->
+            AlertDialog(
+                onDismissRequest = { startupUpdate = null },
+                title = { Text("Ny opdatering ${u.versionName}") },
+                text = { Text(u.message + "\n\nVil du opdatere På farten nu?") },
+                confirmButton = { Button(onClick = { UpdateManager.install(context,u){} }) { Text("Opdater nu") } },
+                dismissButton = { TextButton(onClick = { startupUpdate = null }) { Text("Ikke nu") } }
+            )
+        }
+
         val tabs = listOf(
             AppTab("I dag") { Icon(Icons.Default.Home, null) },
             AppTab("Vagtplan") { Icon(Icons.Default.CalendarMonth, null) },
             AppTab("Timer") { Icon(Icons.Default.Schedule, null) },
             AppTab("Kvittering") { Icon(Icons.Default.ReceiptLong, null) },
-            AppTab("Profil") { Icon(Icons.Default.Person, null) }
+            AppTab("Profil") { Icon(Icons.Default.Person, null) },
+            AppTab("Info & Update") { Icon(Icons.Default.SystemUpdate, null) }
         )
 
         Scaffold(
@@ -113,10 +133,53 @@ fun PaaFartenApp() {
                     1 -> ShiftCalendarScreen()
                     2 -> HoursScreen()
                     3 -> ReceiptScreen()
-                    else -> ProfileScreen()
+                    4 -> ProfileScreen()
+                    else -> InfoUpdateScreen()
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun InfoUpdateScreen() {
+    val context=androidx.compose.ui.platform.LocalContext.current
+    var checking by remember { mutableStateOf(false) }
+    var update by remember { mutableStateOf<AppUpdate?>(null) }
+    var message by remember { mutableStateOf("") }
+    val info=remember { context.packageManager.getPackageInfo(context.packageName,0) }
+    LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
+        item { Text("Info & Update",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold) }
+        item {
+            ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+                Text("På farten",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
+                Text("Installeret version: "+(info.versionName ?: "ukendt")+" ("+info.longVersionCode+")")
+                Text("Appen søger automatisk efter en ny version, når den starter.")
+            }}
+        }
+        item {
+            Button(onClick={
+                checking=true;message="Søger efter opdatering…";update=null
+                UpdateManager.check(context){r->
+                    checking=false
+                    r.onSuccess{u->update=u;message=if(u==null)"Du har den nyeste version." else "Version "+u.versionName+" er klar."}
+                     .onFailure{message="Kunne ikke søge efter opdatering: "+(it.message?:"serverfejl")}
+                }
+            },enabled=!checking,modifier=Modifier.fillMaxWidth()){
+                Icon(Icons.Default.Refresh,null);Spacer(Modifier.width(8.dp));Text(if(checking)"Søger…" else "Søg efter opdatering")
+            }
+        }
+        if(message.isNotBlank()) item { Text(message) }
+        update?.let { u ->
+            item { ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
+                Text("Ny version "+u.versionName,fontWeight=FontWeight.Bold)
+                Text(u.message)
+                Button(onClick={UpdateManager.install(context,u){message=it}},modifier=Modifier.fillMaxWidth()){
+                    Icon(Icons.Default.Download,null);Spacer(Modifier.width(8.dp));Text("Opdater app")
+                }
+            }}}
+        }
+        item { Text("Ved installation viser Android sin sikkerhedsbekræftelse. Efter installation kan På farten åbnes igen med den nye version.",style=MaterialTheme.typography.bodySmall) }
     }
 }
 
