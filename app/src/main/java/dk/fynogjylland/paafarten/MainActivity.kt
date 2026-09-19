@@ -515,24 +515,55 @@ private fun ProfileScreen(){
 
 @Composable
 private fun AbsencePanel(){
+    val (url,token)=rememberConnection()
     var kind by remember { mutableStateOf("Fri") }
     var note by remember { mutableStateOf("") }
-    var from by remember { mutableStateOf("") }
-    var to by remember { mutableStateOf("") }
+    var from by remember { mutableStateOf<LocalDate?>(null) }
+    var to by remember { mutableStateOf<LocalDate?>(null) }
+    var pickFrom by remember { mutableStateOf(false) }
+    var pickTo by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("") }
+    fun pretty(d:LocalDate?)=d?.let{"%02d-%02d-%04d".format(it.dayOfMonth,it.monthValue,it.year)} ?: "Vælg dato"
+
+    if(pickFrom || pickTo){
+        val state=rememberDatePickerState()
+        DatePickerDialog(onDismissRequest={pickFrom=false;pickTo=false},confirmButton={
+            TextButton(onClick={
+                state.selectedDateMillis?.let{ms->
+                    val d=java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                    if(pickFrom){from=d;if(to==null||to!!<d)to=d}else to=d
+                }
+                pickFrom=false;pickTo=false
+            }){Text("Vælg")}
+        },dismissButton={TextButton(onClick={pickFrom=false;pickTo=false}){Text("Annuller")}}){DatePicker(state=state)}
+    }
+
     ElevatedCard(Modifier.fillMaxWidth()){
-        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
             Text("Fravær",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                listOf("Fri","Ferie","Syg").forEach{k->FilterChip(selected=kind==k,onClick={kind=k},label={Text(k)})}
+                listOf("Fri","Ferie","Syg").forEach{k->FilterChip(selected=kind==k,onClick={kind=k;message=""},label={Text(k)})}
             }
             if(kind=="Syg"){
                 Text("Sygemelding skal ske senest kl. 08:00 på vagttelefonen.",fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.error)
                 Text("Denne registrering erstatter ikke opkaldet til vagttelefonen.",style=MaterialTheme.typography.bodySmall)
             } else {
-                OutlinedTextField(from,{from=it},label={Text("Fra dato (ÅÅÅÅ-MM-DD)")},modifier=Modifier.fillMaxWidth(),singleLine=true)
-                OutlinedTextField(to,{to=it},label={Text("Til dato (ÅÅÅÅ-MM-DD)")},modifier=Modifier.fillMaxWidth(),singleLine=true)
+                Text("Fra dato",fontWeight=FontWeight.Medium)
+                OutlinedButton(onClick={pickFrom=true},modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.CalendarMonth,null);Spacer(Modifier.width(8.dp));Text(pretty(from))}
+                Text("Til dato",fontWeight=FontWeight.Medium)
+                OutlinedButton(onClick={pickTo=true},modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.CalendarMonth,null);Spacer(Modifier.width(8.dp));Text(pretty(to))}
                 OutlinedTextField(note,{note=it},label={Text("Bemærkning")},modifier=Modifier.fillMaxWidth())
-                Button(onClick={},enabled=false,modifier=Modifier.fillMaxWidth()){Text("Send ansøgning – servertilkobling følger")}
+                Button(onClick={
+                    val f=from?:return@Button;val t=to?:return@Button
+                    busy=true;message=""
+                    ApiClient.sendAbsence(url,token,kind,f.toString(),t.toString(),note){r->
+                        busy=false
+                        r.onSuccess{message="$kind-forespørgslen er sendt.";note="";from=null;to=null}
+                         .onFailure{message="Kunne ikke sende: "+(it.message?:"serverfejl")}
+                    }
+                },enabled=!busy&&from!=null&&to!=null&&to!!>=from!!,modifier=Modifier.fillMaxWidth()){Text(if(busy)"Sender…" else "Send forespørgsel")}
+                if(message.isNotBlank()) Text(message)
             }
         }
     }
