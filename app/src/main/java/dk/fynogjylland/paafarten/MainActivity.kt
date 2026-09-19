@@ -415,9 +415,16 @@ private fun ReceiptScreen() {
     var message by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
 
-    fun loadHistory(){ ApiClient.receipts(url,token){
-        it.onSuccess{r->receipts=r}
-          .onFailure{e-> receipts=emptyList(); message="Historik kunne ikke hentes: "+(e.message?:"serverfejl") }
+    fun loadHistory(preserveExisting:Boolean=false){ ApiClient.receipts(url,token){
+        it.onSuccess{r->
+            receipts = if(preserveExisting) {
+                val local=receipts ?: emptyList()
+                (local+r).distinctBy { x -> if(x.id>0) "id:${x.id}" else "${x.createdAt}|${x.type}|${x.description}|${x.amount}" }
+            } else r
+        }.onFailure{e->
+            if(receipts==null) receipts=emptyList()
+            message="Historik kunne ikke hentes: "+(e.message?:"serverfejl")
+        }
     } }
     LaunchedEffect(token){ loadHistory() }
 
@@ -479,7 +486,7 @@ private fun ReceiptScreen() {
                         receipts=listOf(saved)+(receipts?:emptyList())
                         message="Kvitteringen er sendt til kontoret og gemt."
                         description=""; amount=""; bitmap=null
-                        loadHistory()
+                        loadHistory(preserveExisting=true)
                     }
                      .onFailure { message=it.message?:"Kunne ikke sende kvitteringen." }
                 }
