@@ -415,9 +415,7 @@ private fun ReceiptScreen() {
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
     var receipts by remember { mutableStateOf<List<ApiReceipt>?>(null) }
     var message by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-
-    fun loadHistory(preserveExisting:Boolean=false){ ApiClient.receipts(url,token){
+    var busy by remember { mutableStateOf(false) }\n    var selectedReceipt by remember { mutableStateOf<ApiReceipt?>(null) }\n\n    fun loadHistory(preserveExisting:Boolean=false){ ApiClient.receipts(url,token){
         it.onSuccess{r->
             receipts = if(preserveExisting) {
                 val local=receipts ?: emptyList()
