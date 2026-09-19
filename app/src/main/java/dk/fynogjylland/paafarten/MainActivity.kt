@@ -1,6 +1,7 @@
 package dk.fynogjylland.paafarten
 
 import android.os.Bundle
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -84,6 +85,11 @@ fun PaaFartenApp() {
 
 @Composable
 private fun LoginScreen(onLogin: () -> Unit) {
+    var showServer by remember { mutableStateOf(false) }
+    if (showServer) {
+        ServerSettingsScreen { showServer = false }
+        return
+    }
     var user by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     Surface(Modifier.fillMaxSize()) {
@@ -101,8 +107,14 @@ private fun LoginScreen(onLogin: () -> Unit) {
             Button(onClick = onLogin, enabled = user.isNotBlank() && password.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
                 Text("Log ind")
             }
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(onClick = { showServer = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Settings, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Serverindstillinger")
+            }
             Spacer(Modifier.height(12.dp))
-            Text("Login kobles til På farten-serveren i næste trin.", style = MaterialTheme.typography.bodySmall)
+            Text("Serveroplysninger gemmes kun lokalt på telefonen og lægges ikke i GitHub.", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -295,6 +307,74 @@ private fun HoursScreen() {
         }
         item {
             Text("Perioden går altid fra den 20. i måneden til den 19. i næste måned. Forrige og næste periode kobles på sammen med serverdata.")
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ServerSettingsScreen(onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { context.getSharedPreferences("paafarten_server", Context.MODE_PRIVATE) }
+    var host by remember { mutableStateOf(prefs.getString("host", "") ?: "") }
+    var port by remember { mutableStateOf(prefs.getString("port", "3306") ?: "3306") }
+    var database by remember { mutableStateOf(prefs.getString("database", "") ?: "") }
+    var username by remember { mutableStateOf(prefs.getString("username", "") ?: "") }
+    var password by remember { mutableStateOf(prefs.getString("password", "") ?: "") }
+    var saved by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Serverindstillinger") },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Tilbage") } }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Text("MySQL-server", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Indstillingerne gemmes lokalt på denne telefon. Adgangskoden bliver ikke skrevet ind i kildekoden eller GitHub.")
+            }
+            item { OutlinedTextField(host, { host = it }, label = { Text("Server / host") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
+            item { OutlinedTextField(port, { port = it }, label = { Text("Port") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
+            item { OutlinedTextField(database, { database = it }, label = { Text("Database") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
+            item { OutlinedTextField(username, { username = it }, label = { Text("Bruger") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
+            item {
+                OutlinedTextField(
+                    password, { password = it },
+                    label = { Text("Kodeord") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                )
+            }
+            item {
+                Button(
+                    onClick = {
+                        prefs.edit()
+                            .putString("host", host.trim())
+                            .putString("port", port.trim())
+                            .putString("database", database.trim())
+                            .putString("username", username.trim())
+                            .putString("password", password)
+                            .apply()
+                        saved = true
+                    },
+                    enabled = host.isNotBlank() && port.isNotBlank() && database.isNotBlank() && username.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Gem serverindstillinger") }
+            }
+            if (saved) item {
+                AssistChip(onClick = {}, label = { Text("Serverindstillinger er gemt på telefonen") }, leadingIcon = { Icon(Icons.Default.CheckCircle, null) })
+            }
+            item {
+                Text("Bemærk: Den endelige app bør forbinde til en sikker HTTPS-API på WWW-serveren i stedet for at åbne MySQL direkte mod internettet. Denne menu kan stadig bruges til serveropsætningen.", style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
