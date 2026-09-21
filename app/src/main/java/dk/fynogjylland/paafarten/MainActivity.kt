@@ -6,8 +6,6 @@ import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.provider.MediaStore
-import androidx.core.content.FileProvider
-import java.io.File
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -585,7 +583,6 @@ private fun ReceiptScreen() {
     var description by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var cameraUri by remember { mutableStateOf<Uri?>(null) }
     val receiptPrefs=remember { context.getSharedPreferences("paafarten_receipts",Context.MODE_PRIVATE) }
     fun readCachedReceipts():List<ApiReceipt> = runCatching {
         val a=org.json.JSONArray(receiptPrefs.getString("items","[]"))
@@ -631,13 +628,8 @@ private fun ReceiptScreen() {
             context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
         }.onSuccess { bitmap=it; message="" }.onFailure { message="Kunne ikke åbne billedet." }
     }
-    val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()){ok->
-        if(ok) {
-            val uri=cameraUri
-            if(uri!=null) runCatching {
-                context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
-            }.onSuccess { bitmap=it; message="" }.onFailure { message="Kunne ikke åbne kamerabilledet." }
-        }
+    val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()){bmp->
+        if(bmp!=null){ bitmap=bmp; message="" }
     }
 
     LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
@@ -658,15 +650,7 @@ private fun ReceiptScreen() {
         }
         item{
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                OutlinedButton(onClick={
-                    runCatching {
-                        val dir=File(context.cacheDir,"receipts").apply{mkdirs()}
-                        val file=File.createTempFile("receipt_",".jpg",dir)
-                        val uri=FileProvider.getUriForFile(context,"dk.fynogjylland.paafarten.fileprovider",file)
-                        cameraUri=uri
-                        camera.launch(uri)
-                    }.onFailure { message="Kamera kunne ikke startes: "+(it.message?:"ukendt fejl") }
-                }){Icon(Icons.Default.PhotoCamera,null);Spacer(Modifier.width(6.dp));Text("Tag foto")}
+                OutlinedButton(onClick={camera.launch(null)}){Icon(Icons.Default.PhotoCamera,null);Spacer(Modifier.width(6.dp));Text("Tag foto")}
                 OutlinedButton(onClick={picker.launch("image/*")}){Icon(Icons.Default.PhotoLibrary,null);Spacer(Modifier.width(6.dp));Text("Vælg foto")}
             }
             bitmap?.let { img ->
