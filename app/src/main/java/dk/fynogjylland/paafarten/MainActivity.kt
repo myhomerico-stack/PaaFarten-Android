@@ -525,81 +525,55 @@ private fun AbsencePanel(){
     val (url,token)=rememberConnection()
     var kind by remember { mutableStateOf("Fri") }
     var note by remember { mutableStateOf("") }
-    var from by remember { mutableStateOf<LocalDate?>(null) }
-    var to by remember { mutableStateOf<LocalDate?>(null) }
-    var pickFrom by remember { mutableStateOf(false) }
-    var pickTo by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
+    var from by remember { mutableStateOf("") }
+    var to by remember { mutableStateOf("") }
+    var requests by remember { mutableStateOf<List<ApiAbsence>?>(null) }
     var message by remember { mutableStateOf("") }
-    fun pretty(d:LocalDate?)=d?.let{"%02d-%02d-%04d".format(it.dayOfMonth,it.monthValue,it.year)} ?: "Vælg dato"
-
-    if(pickFrom || pickTo){
-        val state=rememberDatePickerState()
-        DatePickerDialog(onDismissRequest={pickFrom=false;pickTo=false},confirmButton={
-            TextButton(onClick={
-                state.selectedDateMillis?.let{ms->
-                    val d=java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneOffset.UTC).toLocalDate()
-                    if(pickFrom){from=d;if(to==null||to!!<d)to=d}else to=d
-                }
-                pickFrom=false;pickTo=false
-            }){Text("Vælg")}
-        },dismissButton={TextButton(onClick={pickFrom=false;pickTo=false}){Text("Annuller")}}){DatePicker(state=state)}
-    }
-
+    var busy by remember { mutableStateOf(false) }
+    fun refresh(){ ApiClient.absences(url,token){it.onSuccess{r->requests=r}.onFailure{x->message=x.message?:"Kunne ikke hente ansøgninger"}} }
+    LaunchedEffect(token){refresh()}
     ElevatedCard(Modifier.fillMaxWidth()){
-        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
-            Text("Fravær",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+            Text("Fri / ferie",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                listOf("Fri","Ferie","Syg").forEach{k->FilterChip(selected=kind==k,onClick={kind=k;message=""},label={Text(k)})}
+                listOf("Fri","Ferie","Syg").forEach{k->FilterChip(selected=kind==k,onClick={kind=k},label={Text(k)})}
             }
             if(kind=="Syg"){
                 Text("Sygemelding skal ske senest kl. 08:00 på vagttelefonen.",fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.error)
-                Text("Denne registrering erstatter ikke opkaldet til vagttelefonen.",style=MaterialTheme.typography.bodySmall)
+                Text("Registreringen i appen erstatter ikke opkaldet til vagttelefonen.",style=MaterialTheme.typography.bodySmall)
             } else {
-                Text("Fra dato",fontWeight=FontWeight.Medium)
-                OutlinedButton(onClick={pickFrom=true},modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.CalendarMonth,null);Spacer(Modifier.width(8.dp));Text(pretty(from))}
-                Text("Til dato",fontWeight=FontWeight.Medium)
-                OutlinedButton(onClick={pickTo=true},modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.CalendarMonth,null);Spacer(Modifier.width(8.dp));Text(pretty(to))}
+                OutlinedTextField(from,{from=it},label={Text("Fra dato (ÅÅÅÅ-MM-DD)")},modifier=Modifier.fillMaxWidth(),singleLine=true)
+                OutlinedTextField(to,{to=it},label={Text("Til dato (ÅÅÅÅ-MM-DD)")},modifier=Modifier.fillMaxWidth(),singleLine=true)
                 OutlinedTextField(note,{note=it},label={Text("Bemærkning")},modifier=Modifier.fillMaxWidth())
                 Button(onClick={
-                    val f=from?:return@Button;val t=to?:return@Button
                     busy=true;message=""
-                    ApiClient.sendAbsence(url,token,kind,f.toString(),t.toString(),note){r->
+                    ApiClient.createAbsence(url,token,kind,from,to,note){r->
                         busy=false
-                        r.onSuccess{message="$kind-forespørgslen er sendt.";note="";from=null;to=null}
-                         .onFailure{message="Kunne ikke sende: "+(it.message?:"serverfejl")}
+                        r.onSuccess{message="Ansøgningen er sendt til kontoret.";from="";to="";note="";refresh()}
+                         .onFailure{message=it.message?:"Kunne ikke sende ansøgningen."}
                     }
-                },enabled=!busy&&from!=null&&to!=null&&to!!>=from!!,modifier=Modifier.fillMaxWidth()){Text(if(busy)"Sender…" else "Send forespørgsel")}
-                if(message.isNotBlank()) Text(message)
+                },enabled=!busy&&from.isNotBlank()&&to.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text(if(busy)"Sender…" else "Send ansøgning")}
+            }
+            if(message.isNotBlank()) Text(message)
+            HorizontalDivider()
+            Text("Mine ansøgninger",fontWeight=FontWeight.Bold)
+            when {
+                requests==null -> CircularProgressIndicator()
+                requests!!.isEmpty() -> Text("Ingen ansøgninger endnu.")
+                else -> requests!!.forEach { r ->
+                    ElevatedCard(Modifier.fillMaxWidth()){
+                        Column(Modifier.padding(10.dp)){
+                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+                                Text("${r.type}: ${r.from} – ${r.to}",fontWeight=FontWeight.Bold)
+                                Text(r.status,fontWeight=FontWeight.Bold)
+                            }
+                            if(r.note.isNotBlank()) Text(r.note)
+                            Text("Sendt ${r.createdAt}",style=MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun ReceiptImage(imageUrl: String) {
-    var image by remember(imageUrl) { mutableStateOf<Bitmap?>(null) }
-    var failed by remember(imageUrl) { mutableStateOf(false) }
-    LaunchedEffect(imageUrl) {
-        Thread {
-            try {
-                val conn = (java.net.URL(imageUrl).openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 6000
-                    readTimeout = 10000
-                }
-                if (conn.responseCode in 200..299) {
-                    val bmp = conn.inputStream.use { BitmapFactory.decodeStream(it) }
-                    android.os.Handler(android.os.Looper.getMainLooper()).post { image = bmp }
-                } else android.os.Handler(android.os.Looper.getMainLooper()).post { failed = true }
-            } catch (_: Exception) {
-                android.os.Handler(android.os.Looper.getMainLooper()).post { failed = true }
-            }
-        }.start()
-    }
-    when {
-        image != null -> androidx.compose.foundation.Image(image!!.asImageBitmap(),"Kvitteringsfoto",Modifier.fillMaxWidth().heightIn(max=420.dp),contentScale=ContentScale.Fit)
-        failed -> Text("Kunne ikke hente kvitteringsbilledet.",style=MaterialTheme.typography.bodySmall)
-        else -> Box(Modifier.fillMaxWidth().height(120.dp),contentAlignment=Alignment.Center){CircularProgressIndicator()}
     }
 }
 
