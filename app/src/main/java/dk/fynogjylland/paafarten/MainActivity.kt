@@ -349,7 +349,7 @@ private fun ShiftCalendarScreen() {
     val (url,token)=rememberConnection()
     var month by remember { mutableStateOf(YearMonth.now()) }
     var shifts by remember { mutableStateOf<List<ApiShift>?>(null) }
-    var absences by remember { mutableStateOf<List<ApiAbsence>>(emptyList()) }
+
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
     var error by remember { mutableStateOf("") }
     var showAbsence by remember { mutableStateOf(false) }
@@ -357,9 +357,6 @@ private fun ShiftCalendarScreen() {
         shifts=null; error=""; selectedDay=null
         ApiClient.shifts(url,token,month.atDay(1).toString(),month.atEndOfMonth().toString()){
             it.onSuccess{x->shifts=x}.onFailure{e->error=e.message?:"Serverfejl"}
-        }
-        ApiClient.absences(url,token,month.atDay(1).toString(),month.atEndOfMonth().toString()){
-            it.onSuccess{x->absences=x}
         }
     }
     LazyColumn(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
@@ -381,7 +378,7 @@ private fun ShiftCalendarScreen() {
             error.isNotBlank()->item{Text(error,color=MaterialTheme.colorScheme.error)}
             shifts==null->item{CircularProgressIndicator()}
             else -> {
-                item { MonthCalendar(month,shifts!!,absences,selectedDay){selectedDay=it} }
+                item { MonthCalendar(month,shifts!!,selectedDay){selectedDay=it} }
                 val dayShifts=selectedDay?.let{d->shifts!!.filter{x->x.date.take(10)==d.toString()}} ?: emptyList()
                 if(selectedDay!=null) {
                     item { Text(selectedDay.toString(),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
@@ -393,9 +390,8 @@ private fun ShiftCalendarScreen() {
     }
 }
 @Composable
-private fun MonthCalendar(month:YearMonth, shifts:List<ApiShift>, absences:List<ApiAbsence>, selected:LocalDate?, onDay:(LocalDate)->Unit){
+private fun MonthCalendar(month:YearMonth, shifts:List<ApiShift>, selected:LocalDate?, onDay:(LocalDate)->Unit){
     val shiftDates=shifts.mapNotNull{runCatching{LocalDate.parse(it.date.take(10))}.getOrNull()}.toSet()
-    fun absenceOn(d:LocalDate)=absences.firstOrNull{runCatching{d>=LocalDate.parse(it.from)&&d<=LocalDate.parse(it.to)}.getOrDefault(false)}
     val first=month.atDay(1)
     val offset=first.dayOfWeek.value-1
     val cells=offset+month.lengthOfMonth()
@@ -408,7 +404,7 @@ private fun MonthCalendar(month:YearMonth, shifts:List<ApiShift>, absences:List<
                         val n=week*7+dow-offset+1
                         if(n !in 1..month.lengthOfMonth()) Spacer(Modifier.weight(1f).height(64.dp))
                         else {
-                            val d=month.atDay(n); val has=shiftDates.contains(d); val absence=absenceOn(d)
+                            val d=month.atDay(n); val has=shiftDates.contains(d)
                             Surface(
                                 modifier=Modifier.weight(1f).height(64.dp).padding(2.dp).clickable{onDay(d)},
                                 shape=RoundedCornerShape(8.dp),
@@ -417,7 +413,6 @@ private fun MonthCalendar(month:YearMonth, shifts:List<ApiShift>, absences:List<
                                 Column(Modifier.padding(6.dp)){
                                     Text(n.toString(),fontWeight=if(has) FontWeight.Bold else FontWeight.Normal)
                                     if(has){ Spacer(Modifier.height(2.dp)); Text("Vagt",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold) }
-                                    if(absence!=null){ Text("${absence.kind} · ${absence.status}",style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.Bold) }
                                 }
                             }
                         }
@@ -520,19 +515,10 @@ private fun ProfileScreen(){
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AbsencePanel(){
-    val (url,token)=rememberConnection()
     var kind by remember { mutableStateOf("Fri") }
-    var note by remember { mutableStateOf("") }
-    var from by remember { mutableStateOf("") }
-    var to by remember { mutableStateOf("") }
-    var requests by remember { mutableStateOf<List<ApiAbsence>?>(null) }
-    var message by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    fun refresh(){ ApiClient.absences(url,token){it.onSuccess{r->requests=r}.onFailure{x->message=x.message?:"Kunne ikke hente ansøgninger"}} }
-    LaunchedEffect(token){refresh()}
     ElevatedCard(Modifier.fillMaxWidth()){
         Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-            Text("Fri / ferie",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+            Text("Fri / ferie / sygemelding",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
                 listOf("Fri","Ferie","Syg").forEach{k->FilterChip(selected=kind==k,onClick={kind=k},label={Text(k)})}
             }
@@ -540,36 +526,7 @@ private fun AbsencePanel(){
                 Text("Sygemelding skal ske senest kl. 08:00 på vagttelefonen.",fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.error)
                 Text("Registreringen i appen erstatter ikke opkaldet til vagttelefonen.",style=MaterialTheme.typography.bodySmall)
             } else {
-                OutlinedTextField(from,{from=it},label={Text("Fra dato (ÅÅÅÅ-MM-DD)")},modifier=Modifier.fillMaxWidth(),singleLine=true)
-                OutlinedTextField(to,{to=it},label={Text("Til dato (ÅÅÅÅ-MM-DD)")},modifier=Modifier.fillMaxWidth(),singleLine=true)
-                OutlinedTextField(note,{note=it},label={Text("Bemærkning")},modifier=Modifier.fillMaxWidth())
-                Button(onClick={
-                    busy=true;message=""
-                    ApiClient.createAbsence(url,token,kind,from,to,note){r->
-                        busy=false
-                        r.onSuccess{message="Ansøgningen er sendt til kontoret.";from="";to="";note="";refresh()}
-                         .onFailure{message=it.message?:"Kunne ikke sende ansøgningen."}
-                    }
-                },enabled=!busy&&from.isNotBlank()&&to.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text(if(busy)"Sender…" else "Send ansøgning")}
-            }
-            if(message.isNotBlank()) Text(message)
-            HorizontalDivider()
-            Text("Mine ansøgninger",fontWeight=FontWeight.Bold)
-            when {
-                requests==null -> CircularProgressIndicator()
-                requests!!.isEmpty() -> Text("Ingen ansøgninger endnu.")
-                else -> requests!!.forEach { r ->
-                    ElevatedCard(Modifier.fillMaxWidth()){
-                        Column(Modifier.padding(10.dp)){
-                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
-                                Text("${r.type}: ${r.from} – ${r.to}",fontWeight=FontWeight.Bold)
-                                Text(r.status,fontWeight=FontWeight.Bold)
-                            }
-                            if(r.note.isNotBlank()) Text(r.note)
-                            Text("Sendt ${r.createdAt}",style=MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
+                Text("Ansøgning om $kind bliver tilkoblet kontoret, når serverdelen er installeret.",style=MaterialTheme.typography.bodyMedium)
             }
         }
     }
