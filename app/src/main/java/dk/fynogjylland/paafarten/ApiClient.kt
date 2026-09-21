@@ -213,20 +213,22 @@ fun ApiClient.sendAbsence(baseUrl:String,token:String,kind:String,from:String,to
 }
 
 
-data class ApiAbsence(val id:Int,val kind:String,val from:String,val to:String,val note:String,val status:String)
+data class ApiAbsence(val id:Int,val type:String,val from:String,val to:String,val note:String,val status:String,val createdAt:String="") {
+    val kind:String get()=type
+}
 fun ApiClient.absences(baseUrl:String,token:String,from:String,to:String,callback:(Result<List<ApiAbsence>>)->Unit){
     Thread {
         val r=runCatching {
-            val j=authGet(baseUrl,token,"absences.php?from="+URLEncoder.encode(from,"UTF-8")+"&to="+URLEncoder.encode(to,"UTF-8"))
+            val j=authGet(baseUrl,token,"absence.php")
             val a=j.getJSONArray("requests")
-            (0 until a.length()).map{i->val x=a.getJSONObject(i);ApiAbsence(x.optInt("id"),x.optString("kind"),x.optString("from"),x.optString("to"),x.optString("note"),x.optString("status","Ansøgt"))}
+            (0 until a.length()).map{i->
+                val x=a.getJSONObject(i)
+                ApiAbsence(x.optInt("id"),x.optString("type",x.optString("kind")),x.optString("date_from",x.optString("from")),x.optString("date_to",x.optString("to")),x.optString("note"),x.optString("status","Afventer"),x.optString("created_at"))
+            }.filter { it.to>=from && it.from<=to }
         }
         Handler(Looper.getMainLooper()).post{callback(r)}
     }.start()
 }
-
-data class ApiAbsence(val id:Int,val type:String,val from:String,val to:String,val note:String,val status:String,val createdAt:String)
-
 fun ApiClient.absences(baseUrl:String,token:String,callback:(Result<List<ApiAbsence>>)->Unit){
     Thread {
         val r=runCatching {
@@ -234,7 +236,7 @@ fun ApiClient.absences(baseUrl:String,token:String,callback:(Result<List<ApiAbse
             val a=j.getJSONArray("requests")
             (0 until a.length()).map{i->
                 val x=a.getJSONObject(i)
-                ApiAbsence(x.optInt("id"),x.optString("type"),x.optString("date_from"),x.optString("date_to"),x.optString("note"),x.optString("status","Afventer"),x.optString("created_at"))
+                ApiAbsence(x.optInt("id"),x.optString("type",x.optString("kind")),x.optString("date_from",x.optString("from")),x.optString("date_to",x.optString("to")),x.optString("note"),x.optString("status","Afventer"),x.optString("created_at"))
             }
         }
         Handler(Looper.getMainLooper()).post{callback(r)}
