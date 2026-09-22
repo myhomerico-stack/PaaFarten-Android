@@ -355,7 +355,8 @@ private fun ShiftCalendarScreen() {
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
     var error by remember { mutableStateOf("") }
     var showAbsence by remember { mutableStateOf(false) }
-    LaunchedEffect(month,token){
+    var absenceRefresh by remember { mutableIntStateOf(0) }
+    LaunchedEffect(month,token,absenceRefresh){
         shifts=null; error=""; selectedDay=null
         ApiClient.shifts(url,token,month.atDay(1).toString(),month.atEndOfMonth().toString()){
             it.onSuccess{x->shifts=x}.onFailure{e->error=e.message?:"Serverfejl"}
@@ -377,7 +378,7 @@ private fun ShiftCalendarScreen() {
             OutlinedButton(onClick={showAbsence=!showAbsence},modifier=Modifier.fillMaxWidth()){
                 Icon(Icons.Default.EventAvailable,null); Spacer(Modifier.width(8.dp)); Text("Fri / ferie / sygemelding")
             }
-            if(showAbsence) AbsencePanel()
+            if(showAbsence) AbsencePanel(onSent={ absenceRefresh++; showAbsence=false })
         }
         when {
             error.isNotBlank()->item{Text(error,color=MaterialTheme.colorScheme.error)}
@@ -385,10 +386,12 @@ private fun ShiftCalendarScreen() {
             else -> {
                 item { MonthCalendar(month,shifts!!,absences,selectedDay){selectedDay=it} }
                 val dayShifts=selectedDay?.let{d->shifts!!.filter{x->x.date.take(10)==d.toString()}} ?: emptyList()
+                val dayAbsence=selectedDay?.let{d->absences.firstOrNull{a->runCatching{d>=LocalDate.parse(a.from)&&d<=LocalDate.parse(a.to)}.getOrDefault(false)}}
                 if(selectedDay!=null) {
                     item { Text(selectedDay.toString(),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
-                    if(dayShifts.isEmpty()) item{Text("Ingen vagt denne dag.")}
-                    else items(dayShifts){ RealShiftCard(it,false) }
+                    if(dayAbsence!=null) item { AbsenceStatusCard(dayAbsence) }
+                    if(dayShifts.isEmpty() && dayAbsence==null) item{Text("Ingen vagt denne dag.")}
+                    else if(dayShifts.isNotEmpty()) items(dayShifts){ RealShiftCard(it,false) }
                 }
             }
         }
@@ -429,6 +432,19 @@ private fun MonthCalendar(month:YearMonth, shifts:List<ApiShift>, absences:List<
         }
     }
 }
+@Composable
+private fun AbsenceStatusCard(a:ApiAbsence){
+    val approved=a.status.equals("Godkendt",true)
+    ElevatedCard(Modifier.fillMaxWidth()){
+        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(5.dp)){
+            Text(if(approved) a.kind.uppercase() else "${a.kind} · ${a.status}",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+            Text("${a.from} – ${a.to}")
+            if(a.note.isNotBlank()) Text(a.note)
+            if(!approved) Text("Status: ${a.status}",fontWeight=FontWeight.Bold)
+        }
+    }
+}
+
 @Composable
 private fun RealShiftCard(s:ApiShift,expanded:Boolean){
     var open by remember { mutableStateOf(expanded) }
@@ -521,7 +537,7 @@ private fun ProfileScreen(){
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AbsencePanel(){
+private fun AbsencePanel(onSent:()->Unit = {}){
     val (url,token)=rememberConnection()
     var kind by remember { mutableStateOf("Fri") }
     var note by remember { mutableStateOf("") }
@@ -566,7 +582,7 @@ private fun AbsencePanel(){
                     busy=true;message=""
                     ApiClient.sendAbsence(url,token,kind,f.toString(),t.toString(),note){r->
                         busy=false
-                        r.onSuccess{message="$kind-forespørgslen er sendt.";note="";from=null;to=null}
+                        r.onSuccess{message="$kind-forespørgslen er sendt.";note="";from=null;to=null;onSent()}
                          .onFailure{message="Kunne ikke sende: "+(it.message?:"serverfejl")}
                     }
                 },enabled=!busy&&from!=null&&to!=null&&to!!>=from!!,modifier=Modifier.fillMaxWidth()){Text(if(busy)"Sender…" else "Send forespørgsel")}
