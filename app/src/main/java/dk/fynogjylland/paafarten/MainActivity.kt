@@ -650,7 +650,10 @@ private fun ReceiptScreen() {
             message="Historik kunne ikke hentes: "+(e.message?:"serverfejl")
         }
     } }
-    LaunchedEffect(token){ loadHistory(true) }
+    LaunchedEffect(token){ loadHistory(false) }
+    DisposableEffect(Unit) {
+        onDispose { }
+    }
 
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->
         if(uri!=null) runCatching {
@@ -712,7 +715,7 @@ private fun ReceiptScreen() {
                         saveCachedReceipts(updated)
                         message="Kvitteringen er sendt til kontoret og gemt."
                         description=""; amount=""; bitmap=null
-                        loadHistory(preserveExisting=true)
+                        loadHistory(preserveExisting=false)
                     }
                      .onFailure { message=it.message?:"Kunne ikke sende kvitteringen." }
                 }
