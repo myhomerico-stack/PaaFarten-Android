@@ -447,8 +447,7 @@ private fun AbsenceStatusCard(a:ApiAbsence){
 
 @Composable
 private fun RealShiftCard(s:ApiShift,expanded:Boolean){
-    var open by remember(s.date) { mutableStateOf(expanded) }
-    var selectedCustomer by remember { mutableStateOf<ApiShiftStep?>(null) }
+    var open by remember { mutableStateOf(expanded) }
     ElevatedCard(Modifier.fillMaxWidth().clickable{open=!open}){
         Column(Modifier.padding(16.dp)){
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
@@ -456,57 +455,19 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
                 Text("${clock(s.start)} – ${clock(s.end)}",fontWeight=FontWeight.Bold)
             }
             Text("Planlagt: ${mins(s.plannedMinutes)}")
-            Text(if(open) "Tryk for at lukke" else "Tryk for at se kunder og turdetaljer",
-                style=MaterialTheme.typography.bodySmall)
             if(open){
                 HorizontalDivider(Modifier.padding(vertical=10.dp))
                 if(s.steps.isEmpty()) Text("Ingen vagttrin.") else s.steps.forEach { step ->
-                    val hasCustomer=step.customerName.isNotBlank() || step.customerPhone.isNotBlank() ||
-                        step.fromAddress.isNotBlank() || step.toAddress.isNotBlank()
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .then(if(hasCustomer) Modifier.clickable { selectedCustomer=step } else Modifier)
-                            .padding(vertical=9.dp)
-                    ) {
+                    Row(Modifier.fillMaxWidth().padding(vertical=6.dp)) {
                         Text(clock(step.time), modifier=Modifier.width(58.dp), fontWeight=FontWeight.Bold)
-                        Column(Modifier.weight(1f)) {
-                            Text(step.customerName.ifBlank { step.title }, fontWeight=FontWeight.Bold)
-                            if(step.customerName.isNotBlank() && step.title.isNotBlank()) Text(step.title,style=MaterialTheme.typography.bodySmall)
-                            if(step.detail.isNotBlank()) Text(step.detail,style=MaterialTheme.typography.bodySmall)
-                            if(hasCustomer) Text("Se kundedetaljer",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelMedium)
+                        Column {
+                            Text(step.title, fontWeight=FontWeight.Bold)
+                            if(step.detail.isNotBlank()) Text(step.detail, style=MaterialTheme.typography.bodySmall)
                         }
-                        if(hasCustomer) Icon(Icons.Default.ChevronRight,contentDescription="Åbn kundedetaljer")
                     }
                 }
             }
         }
-    }
-    selectedCustomer?.let { customer ->
-        val context=androidx.compose.ui.platform.LocalContext.current
-        AlertDialog(
-            onDismissRequest={selectedCustomer=null},
-            title={Text(customer.customerName.ifBlank { customer.title })},
-            text={
-                Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
-                    if(customer.startAt.isNotBlank() || customer.endAt.isNotBlank())
-                        Text("Tid: ${customer.startAt.ifBlank { customer.time }} – ${customer.endAt}")
-                    if(customer.busName.isNotBlank() || customer.busReg.isNotBlank())
-                        Text("Bus: ${customer.busName} ${customer.busReg}".trim())
-                    if(customer.fromAddress.isNotBlank()) Text("Afhentning: ${customer.fromAddress}")
-                    if(customer.toAddress.isNotBlank()) Text("Destination: ${customer.toAddress}")
-                    if(customer.customerPhone.isNotBlank()){
-                        Text("Telefon: ${customer.customerPhone}")
-                        TextButton(onClick={
-                            val number=Uri.encode(customer.customerPhone)
-                            context.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL,Uri.parse("tel:" + number)))
-                        }) { Icon(Icons.Default.Call,null); Spacer(Modifier.width(6.dp)); Text("Ring til kunden") }
-                    }
-                    if(customer.notes.isNotBlank()) Text("Bemærkninger: ${customer.notes}")
-                    if(customer.detail.isNotBlank()) Text(customer.detail)
-                }
-            },
-            confirmButton={TextButton(onClick={selectedCustomer=null}){Text("Luk")}}
-        )
     }
 }
 @Composable
