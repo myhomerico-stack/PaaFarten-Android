@@ -391,7 +391,7 @@ private fun ShiftCalendarScreen() {
                     item { Text(selectedDay.toString(),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     if(dayAbsence!=null) item { AbsenceStatusCard(dayAbsence) }
                     if(dayShifts.isEmpty() && dayAbsence==null) item{Text("Ingen vagt denne dag.")}
-                    else if(dayShifts.isNotEmpty()) items(dayShifts){ RealShiftCard(it,false) }
+                    else if(dayShifts.isNotEmpty()) items(dayShifts){ RealShiftCard(it,true) }
                 }
             }
         }
@@ -421,7 +421,16 @@ private fun MonthCalendar(month:YearMonth, shifts:List<ApiShift>, absences:List<
                             ){
                                 Column(Modifier.padding(6.dp)){
                                     Text(n.toString(),fontWeight=if(has) FontWeight.Bold else FontWeight.Normal)
-                                    if(has){ Spacer(Modifier.height(2.dp)); Text("Vagt",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold) }
+                                    if(has){
+                                        val dayTours=shifts.filter{it.date.take(10)==d.toString()}
+                                            .flatMap{it.steps}
+                                            .filter{it.customerName.isNotBlank() || it.fromAddress.isNotBlank() || it.toAddress.isNotBlank()}
+                                            .distinctBy{listOf(it.customerName,it.fromAddress,it.toAddress,it.startAt,it.endAt)}
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(if(dayTours.isEmpty()) "Vagt" else "${dayTours.size} ture",
+                                            style=MaterialTheme.typography.labelSmall,
+                                            color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold)
+                                    }
                                     if(absence!=null){ Text("${absence.kind} · ${absence.status}",style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.Bold) }
                                 }
                             }
