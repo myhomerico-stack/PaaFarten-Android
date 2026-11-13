@@ -493,11 +493,11 @@ private fun HoursScreen(){
         else if(data==null) item{CircularProgressIndicator()}
         else {
             item{ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp)){
-                Text("Registrerede timer",style=MaterialTheme.typography.labelLarge)
+                Text("Godkendte arbejdstimer",style=MaterialTheme.typography.labelLarge)
                 Text(mins(data!!.actualMinutes),style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)
-                Text("Planlagt: ${mins(data!!.plannedMinutes)}")
+                Text("Lønperiode: 20. – 19. · Kun godkendte timer")
             }}}
-            if(data!!.rows.isEmpty()) item{Text("Ingen timer registreret i perioden.")}
+            if(data!!.rows.isEmpty()) item{Text("Ingen godkendte timer i perioden endnu.")}
             else items(data!!.rows){r->ElevatedCard(Modifier.fillMaxWidth()){Row(Modifier.fillMaxWidth().padding(16.dp),horizontalArrangement=Arrangement.SpaceBetween){Text(r.first);Text(mins(r.second),fontWeight=FontWeight.Bold)}}}
         }
     }
