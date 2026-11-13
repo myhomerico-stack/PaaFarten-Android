@@ -60,7 +60,13 @@ object ApiClient {
 }
 
 
-data class ApiShiftStep(val time:String,val title:String,val detail:String)
+data class ApiShiftStep(
+    val time:String, val title:String, val detail:String,
+    val customerName:String="", val customerPhone:String="",
+    val fromAddress:String="", val toAddress:String="",
+    val startAt:String="", val endAt:String="",
+    val busName:String="", val busReg:String="", val notes:String=""
+)
 data class ApiShift(val date:String,val start:String,val end:String,val plannedMinutes:Int,val actualMinutes:Int,val steps:List<ApiShiftStep>)
 data class ApiHours(val from:String,val to:String,val plannedMinutes:Int,val actualMinutes:Int,val rows:List<Pair<String,Int>>)
 data class ApiProfile(val name:String,val email:String,val phone:String)
@@ -94,7 +100,53 @@ fun ApiClient.shifts(baseUrl:String,token:String,from:String,to:String,callback:
                     val time=x.optString("step_time")
                     val title=x.optString("step_text").ifBlank { x.optString("title").ifBlank { "Vagttrin" } }
                     val detail=x.optString("detail").ifBlank { x.optString("description") }
-                    ApiShiftStep(time,title,detail)
+                    ApiShiftStep(
+    val time:String, val title:String, val detail:String,
+    val customerName:String="", val customerPhone:String="",
+    val fromAddress:String="", val toAddress:String="",
+    val startAt:String="", val endAt:String="",
+    val busName:String="", val busReg:String="", val notes:String=""
+)
+data class ApiShift(val date:String,val start:String,val end:String,val plannedMinutes:Int,val actualMinutes:Int,val steps:List<ApiShiftStep>)
+data class ApiHours(val from:String,val to:String,val plannedMinutes:Int,val actualMinutes:Int,val rows:List<Pair<String,Int>>)
+data class ApiProfile(val name:String,val email:String,val phone:String)
+
+private fun authGet(baseUrl:String, token:String, endpoint:String): JSONObject {
+    val root=if(baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+    val conn=(URL(root+endpoint).openConnection() as HttpURLConnection).apply {
+        requestMethod="GET"; connectTimeout=6000; readTimeout=6000
+        setRequestProperty("Accept","application/json")
+        setRequestProperty("Authorization","Bearer $token")
+    }
+    val code=conn.responseCode
+    val raw=(if(code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
+    if(code !in 200..299) throw IllegalStateException(JSONObject(raw).optString("message","HTTP $code"))
+    return JSONObject(raw)
+}
+
+fun ApiClient.shifts(baseUrl:String,token:String,from:String,to:String,callback:(Result<List<ApiShift>>)->Unit) {
+    Thread {
+        val r=runCatching {
+            val j=authGet(baseUrl,token,"shifts.php?from=$from&to=$to")
+            val a=j.getJSONArray("shifts")
+            (0 until a.length()).map { i ->
+                val s=a.getJSONObject(i); val sa=s.optJSONArray("steps")
+                val steps=if(sa==null) emptyList() else (0 until sa.length()).map { k ->
+                    val x=sa.getJSONObject(k)
+                    // Samme felter som minside/day.php: step_time, step_text og detail.
+                    // Tidspunktet er det gemte tidspunkt fra På farten-vagtplanen.
+                    // Serveren kan levere step_time som fuld dato+tid.
+                    // Bevar værdien; UI formatterer den til HH:mm.
+                    val time=x.optString("step_time")
+                    val title=x.optString("step_text").ifBlank { x.optString("title").ifBlank { "Vagttrin" } }
+                    val detail=x.optString("detail").ifBlank { x.optString("description") }
+                    ApiShiftStep(
+                        time,title,detail,
+                        x.optString("customer_name"),x.optString("customer_phone"),
+                        x.optString("from_address"),x.optString("to_address"),
+                        x.optString("start_at"),x.optString("end_at"),
+                        x.optString("bus_name"),x.optString("bus_reg"),x.optString("notes")
+                    )
                 }
                 ApiShift(s.optString("work_date"),s.optString("planned_start"),s.optString("planned_end"),s.optInt("planned_minutes"),s.optInt("actual_minutes"),steps)
             }
