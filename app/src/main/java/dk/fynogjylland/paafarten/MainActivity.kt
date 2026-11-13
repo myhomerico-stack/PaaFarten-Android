@@ -498,7 +498,7 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
                         Text("Telefon: ${customer.customerPhone}")
                         TextButton(onClick={
                             val number=Uri.encode(customer.customerPhone)
-                            context.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL,Uri.parse("tel:$"+"number")))
+                            context.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL,Uri.parse("tel:" + number)))
                         }) { Icon(Icons.Default.Call,null); Spacer(Modifier.width(6.dp)); Text("Ring til kunden") }
                     }
                     if(customer.notes.isNotBlank()) Text("Bemærkninger: ${customer.notes}")
