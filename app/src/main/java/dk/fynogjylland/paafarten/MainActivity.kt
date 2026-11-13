@@ -480,7 +480,8 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
             if(open){
                 HorizontalDivider(Modifier.padding(vertical=10.dp))
                 if(s.steps.isEmpty()) Text("Ingen vagttrin.") else s.steps.sortedWith(compareBy<ApiShiftStep> { shiftStepSortKey(it) }).forEach { step ->
-                    val hasCustomer=step.customerName.isNotBlank() || step.customerPhone.isNotBlank() ||
+                    val hasCustomer=step.title.isNotBlank() || step.detail.isNotBlank() ||
+                        step.customerName.isNotBlank() || step.customerPhone.isNotBlank() ||
                         step.fromAddress.isNotBlank() || step.toAddress.isNotBlank()
                     Row(
                         Modifier.fillMaxWidth()
@@ -521,7 +522,7 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
                         }) { Icon(Icons.Default.Call,null); Spacer(Modifier.width(6.dp)); Text("Ring til kunden") }
                     }
                     if(customer.notes.isNotBlank()) Text("Bemærkninger: ${customer.notes}")
-                    if(customer.detail.isNotBlank()) Text(customer.detail)
+                    if(customer.detail.isNotBlank()) Text("Turdetaljer: ${customer.detail}")
                 }
             },
             confirmButton={TextButton(onClick={selectedCustomer=null}){Text("Luk")}}
