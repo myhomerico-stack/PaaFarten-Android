@@ -454,6 +454,16 @@ private fun AbsenceStatusCard(a:ApiAbsence){
     }
 }
 
+private fun shiftStepSortKey(step:ApiShiftStep): String {
+    // Full ISO date/time sorts across midnight; HH:mm uses the shift's supplied time.
+    val raw=step.startAt.ifBlank { step.time }.trim()
+    val normalized=raw.replace('T',' ')
+    val full=Regex("""^(\\d{4}-\\d{2}-\\d{2})[ ](\\d{1,2}):(\\d{2})""").find(normalized)
+    if(full!=null) return full.groupValues[1]+" "+full.groupValues[2].padStart(2,'0')+":"+full.groupValues[3]
+    val hour=Regex("""^(\\d{1,2}):(\\d{2})""").find(normalized)
+    if(hour!=null) return "9999-12-31 "+hour.groupValues[1].padStart(2,'0')+":"+hour.groupValues[2]
+    return "9999-12-31 99:99"
+}
 @Composable
 private fun RealShiftCard(s:ApiShift,expanded:Boolean){
     var open by remember(s.date) { mutableStateOf(expanded) }
@@ -469,7 +479,7 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
                 style=MaterialTheme.typography.bodySmall)
             if(open){
                 HorizontalDivider(Modifier.padding(vertical=10.dp))
-                if(s.steps.isEmpty()) Text("Ingen vagttrin.") else s.steps.forEach { step ->
+                if(s.steps.isEmpty()) Text("Ingen vagttrin.") else s.steps.sortedWith(compareBy<ApiShiftStep> { shiftStepSortKey(it) }).forEach { step ->
                     val hasCustomer=step.customerName.isNotBlank() || step.customerPhone.isNotBlank() ||
                         step.fromAddress.isNotBlank() || step.toAddress.isNotBlank()
                     Row(
