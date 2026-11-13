@@ -60,7 +60,13 @@ object ApiClient {
 }
 
 
-data class ApiShiftStep(val time:String,val title:String,val detail:String)
+data class ApiShiftStep(
+    val time:String, val title:String, val detail:String,
+    val customerName:String="", val customerPhone:String="",
+    val fromAddress:String="", val toAddress:String="",
+    val startAt:String="", val endAt:String="",
+    val busName:String="", val busReg:String="", val notes:String=""
+)
 data class ApiShift(val date:String,val start:String,val end:String,val plannedMinutes:Int,val actualMinutes:Int,val steps:List<ApiShiftStep>)
 data class ApiHours(val from:String,val to:String,val plannedMinutes:Int,val actualMinutes:Int,val rows:List<Pair<String,Int>>)
 data class ApiProfile(val name:String,val email:String,val phone:String)
@@ -94,7 +100,13 @@ fun ApiClient.shifts(baseUrl:String,token:String,from:String,to:String,callback:
                     val time=x.optString("step_time")
                     val title=x.optString("step_text").ifBlank { x.optString("title").ifBlank { "Vagttrin" } }
                     val detail=x.optString("detail").ifBlank { x.optString("description") }
-                    ApiShiftStep(time,title,detail)
+                    ApiShiftStep(
+                        time,title,detail,
+                        x.optString("customer_name"),x.optString("customer_phone"),
+                        x.optString("from_address"),x.optString("to_address"),
+                        x.optString("start_at"),x.optString("end_at"),
+                        x.optString("bus_name"),x.optString("bus_reg"),x.optString("notes")
+                    )
                 }
                 ApiShift(s.optString("work_date"),s.optString("planned_start"),s.optString("planned_end"),s.optInt("planned_minutes"),s.optInt("actual_minutes"),steps)
             }
