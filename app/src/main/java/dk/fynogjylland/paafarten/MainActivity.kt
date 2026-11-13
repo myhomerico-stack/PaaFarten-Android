@@ -454,16 +454,16 @@ private fun AbsenceStatusCard(a:ApiAbsence){
     }
 }
 
-private fun shiftStepSortKey(step:ApiShiftStep): String {
-    // Full ISO date/time sorts across midnight; HH:mm uses the shift's supplied time.
-    val raw=step.startAt.ifBlank { step.time }.trim()
-    val normalized=raw.replace('T',' ')
-    val full=Regex("""^(\\d{4}-\\d{2}-\\d{2})[ ](\\d{1,2}):(\\d{2})""").find(normalized)
-    if(full!=null) return full.groupValues[1]+" "+full.groupValues[2].padStart(2,'0')+":"+full.groupValues[3]
-    val hour=Regex("""^(\\d{1,2}):(\\d{2})""").find(normalized)
-    if(hour!=null) return "9999-12-31 "+hour.groupValues[1].padStart(2,'0')+":"+hour.groupValues[2]
-    return "9999-12-31 99:99"
+private fun shiftStepSortKey(step:ApiShiftStep): Int {
+    // Sortér efter det klokkeslæt chaufføren faktisk ser, ikke turens oprettelsesrækkefølge
+    // eller en separat startAt-dato, der kan tilhøre en anden kalenderdag.
+    val displayed=clock(step.time).trim()
+    val match=Regex("""(\d{1,2}):(\d{2})""").find(displayed)
+        ?: Regex("""(\d{1,2}):(\d{2})""").find(step.time)
+        ?: return Int.MAX_VALUE
+    return match.groupValues[1].toInt()*60 + match.groupValues[2].toInt()
 }
+
 @Composable
 private fun RealShiftCard(s:ApiShift,expanded:Boolean){
     var open by remember(s.date) { mutableStateOf(expanded) }
