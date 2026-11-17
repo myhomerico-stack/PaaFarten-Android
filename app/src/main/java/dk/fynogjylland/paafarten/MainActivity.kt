@@ -1,6 +1,8 @@
 package dk.fynogjylland.paafarten
 
 import android.os.Bundle
+import android.app.DownloadManager
+import android.os.Environment
 import android.content.Context
 import android.net.Uri
 import android.graphics.Bitmap
@@ -483,6 +485,7 @@ private fun combinedTripSteps(steps:List<ApiShiftStep>):List<ApiShiftStep> {
 private fun RealShiftCard(s:ApiShift,expanded:Boolean){
     var open by remember(s.date) { mutableStateOf(expanded) }
     var selectedCustomer by remember { mutableStateOf<ApiShiftStep?>(null) }
+    var selectedTour by remember { mutableLongStateOf(0L) }
     ElevatedCard(Modifier.fillMaxWidth().clickable{open=!open}){
         Column(Modifier.padding(16.dp)){
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
@@ -511,6 +514,7 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
                             if(step.toAddress.isNotBlank()) Text("Destination: ${step.toAddress}",style=MaterialTheme.typography.bodySmall)
                             if(step.fromAddress.isBlank() && step.toAddress.isBlank() && step.detail.isNotBlank()) Text(step.detail,style=MaterialTheme.typography.bodySmall)
                             if(hasCustomer) Text("Se kundedetaljer",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelMedium)
+                            if(step.calendarTourId>0) TextButton(onClick={selectedTour=step.calendarTourId}){Text("Dokumenter og bemærkninger") }
                         }
                         if(hasCustomer) Icon(Icons.Default.ChevronRight,contentDescription="Åbn kundedetaljer")
                     }
@@ -518,6 +522,7 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
             }
         }
     }
+    if(selectedTour>0L) TripDocumentsDialog(selectedTour){selectedTour=0L}
     selectedCustomer?.let { customer ->
         val context=androidx.compose.ui.platform.LocalContext.current
         AlertDialog(
@@ -546,6 +551,67 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
         )
     }
 }
+@Composable
+private fun TripDocumentsDialog(tourId:Long,onClose:()->Unit){
+ val context=androidx.compose.ui.platform.LocalContext.current
+ val (url,token)=rememberConnection()
+ var data by remember(tourId){mutableStateOf<TripDocuments?>(null)}
+ var error by remember(tourId){mutableStateOf("")}
+ var note by remember(tourId){mutableStateOf("")}
+ var photo by remember(tourId){mutableStateOf<ByteArray?>(null)}
+ var busy by remember(tourId){mutableStateOf(false)}
+ var refresh by remember(tourId){mutableIntStateOf(0)}
+ val pick=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){ uri->
+  if(uri!=null)runCatching{
+   val stream=context.contentResolver.openInputStream(uri)
+   val bitmap=stream.use{BitmapFactory.decodeStream(it)}
+   requireNotNull(bitmap){"Billedet kunne ikke åbnes"}
+   val out=java.io.ByteArrayOutputStream()
+   bitmap.compress(Bitmap.CompressFormat.JPEG,80,out)
+   val bytes=out.toByteArray()
+   require(bytes.size<=12*1024*1024){"Billedet er for stort"}
+   photo=bytes
+  }.onFailure{error=it.message?:"Kunne ikke vælge billedet"}
+ }
+ LaunchedEffect(tourId,refresh){
+  ApiClient.tripDocuments(url,token,tourId){it.onSuccess{x->data=x}.onFailure{error=it.message?:"Kunne ikke hente dokumenter"}}
+ }
+ AlertDialog(onDismissRequest=onClose,title={Text("Turens dokumenter og bemærkninger")},
+  text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+   if(error.isNotBlank())Text(error,color=MaterialTheme.colorScheme.error)
+   if(data==null)CircularProgressIndicator()
+   data?.documents?.forEach { doc->
+    Column{
+     Text(doc.by+" · "+doc.created,style=MaterialTheme.typography.labelSmall)
+     if(doc.note.isNotBlank())Text(doc.note)
+     if(doc.filename.isNotBlank())TextButton(onClick={
+      runCatching{
+       val request=DownloadManager.Request(Uri.parse(url+"trip_document_download.php?id="+doc.id))
+        .addRequestHeader("Authorization","Bearer "+token)
+        .setTitle(doc.filename)
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,doc.filename.replace(Regex("[^a-zA-Z0-9._-]"),"_"))
+       (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+      }.onFailure{error=it.message?:"Kunne ikke starte download"}
+     }){Icon(Icons.Default.Download,null);Spacer(Modifier.width(4.dp));Text(doc.filename)}
+    }
+    HorizontalDivider()
+   }
+   if(data?.canSubmit==true){
+    OutlinedTextField(value=note,onValueChange={note=it},label={Text("Bemærkning efter turen")},modifier=Modifier.fillMaxWidth())
+    OutlinedButton(onClick={pick.launch("image/*")}){Icon(Icons.Default.AddAPhoto,null);Spacer(Modifier.width(6.dp));Text(if(photo==null)"Vedhæft billede" else "Billede valgt")}
+    Button(enabled=!busy&&(note.isNotBlank()||photo!=null),onClick={
+     busy=true;error=""
+     ApiClient.sendTripNote(url,token,tourId,note.trim(),photo){
+      busy=false
+      it.onSuccess{note="";photo=null;refresh++}.onFailure{e->error=e.message?:"Kunne ikke gemme"}
+     }
+    }){Text(if(busy)"Gemmer…" else "Send bemærkning / billede")}
+   }else if(data!=null)Text("Bemærkninger og billeder kan tilføjes efter turens sluttid.",style=MaterialTheme.typography.bodySmall)
+  }},
+  confirmButton={TextButton(onClick=onClose){Text("Luk")}})
+}
+
 @Composable
 private fun HoursScreen(){
     val (url,token)=rememberConnection()

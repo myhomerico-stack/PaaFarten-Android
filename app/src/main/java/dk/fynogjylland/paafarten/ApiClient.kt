@@ -65,7 +65,7 @@ data class ApiShiftStep(
     val customerName:String="", val customerPhone:String="",
     val fromAddress:String="", val toAddress:String="",
     val startAt:String="", val endAt:String="",
-    val busName:String="", val busReg:String="", val notes:String=""
+    val busName:String="", val busReg:String="", val notes:String="", val calendarTourId:Long=0
 )
 data class ApiShift(val date:String,val start:String,val end:String,val plannedMinutes:Int,val actualMinutes:Int,val steps:List<ApiShiftStep>)
 data class ApiHours(val from:String,val to:String,val plannedMinutes:Int,val actualMinutes:Int,val rows:List<Pair<String,Int>>)
@@ -105,7 +105,7 @@ fun ApiClient.shifts(baseUrl:String,token:String,from:String,to:String,callback:
                         x.optString("customer_name"),x.optString("customer_phone"),
                         x.optString("from_address"),x.optString("to_address"),
                         x.optString("start_at"),x.optString("end_at"),
-                        x.optString("bus_name"),x.optString("bus_reg"),x.optString("notes")
+                        x.optString("bus_name"),x.optString("bus_reg"),x.optString("notes"),x.optLong("calendar_tour_id",0)
                     )
                 }
                 ApiShift(s.optString("work_date"),s.optString("planned_start"),s.optString("planned_end"),s.optInt("planned_minutes"),s.optInt("actual_minutes"),steps)
@@ -235,4 +235,46 @@ fun ApiClient.absences(baseUrl:String,token:String,from:String,to:String,callbac
         }
         Handler(Looper.getMainLooper()).post{callback(r)}
     }.start()
+}
+
+data class TripDocument(val id:Long,val kind:String,val note:String,val filename:String,val by:String,val created:String)
+data class TripDocuments(val documents:List<TripDocument>,val canSubmit:Boolean)
+fun ApiClient.tripDocuments(base:String,token:String,tourId:Long,callback:(Result<TripDocuments>)->Unit){
+ Thread {
+  val result=runCatching {
+   val j=authGet(base,token,"trip_documents.php?tour_id=$tourId")
+   val a=j.getJSONArray("documents")
+   TripDocuments((0 until a.length()).map { i-> val x=a.getJSONObject(i)
+    TripDocument(x.optLong("id"),x.optString("kind"),x.optString("note"),x.optString("original_name"),x.optString("uploaded_by"),x.optString("created_at"))
+   },j.optBoolean("can_submit"))
+  }
+  Handler(Looper.getMainLooper()).post{callback(result)}
+ }.start()
+}
+fun ApiClient.sendTripNote(base:String,token:String,tourId:Long,note:String,photo:ByteArray?,callback:(Result<Unit>)->Unit){
+ Thread {
+  val result=runCatching {
+   val boundary="PaaFarten"+System.currentTimeMillis()
+   val root=if(base.endsWith("/"))base else "$base/"
+   val conn=(URL(root+"trip_documents.php").openConnection() as HttpURLConnection).apply{
+    requestMethod="POST";connectTimeout=12000;readTimeout=20000;doOutput=true
+    setRequestProperty("Authorization","Bearer $token")
+    setRequestProperty("Content-Type","multipart/form-data; boundary=$boundary")
+   }
+   conn.outputStream.use { out->
+    fun field(name:String,value:String){
+     out.write(("--$boundary\r\nContent-Disposition: form-data; name=\"$name\"\r\n\r\n$value\r\n").toByteArray(Charsets.UTF_8))
+    }
+    field("tour_id",tourId.toString());field("note",note)
+    if(photo!=null){
+     out.write(("--$boundary\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"foto.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n").toByteArray(Charsets.UTF_8))
+     out.write(photo);out.write("\r\n".toByteArray())
+    }
+    out.write(("--$boundary--\r\n").toByteArray())
+   }
+   val raw=(if(conn.responseCode in 200..299)conn.inputStream else conn.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
+   val j=JSONObject(raw);if(!j.optBoolean("ok"))throw IllegalStateException(j.optString("message","Upload mislykkedes"))
+  }
+  Handler(Looper.getMainLooper()).post{callback(result)}
+ }.start()
 }
