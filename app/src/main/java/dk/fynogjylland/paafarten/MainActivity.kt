@@ -455,6 +455,30 @@ private fun shiftStepSortKey(step:ApiShiftStep): Int {
     return match.groupValues[1].toInt()*60 + match.groupValues[2].toInt()
 }
 
+// Afhentning og destination fra samme tur har samme start/slut og kunde.
+// Saml kun trin med komplette tur-identifikatorer; øvrige vagttrin bevares.
+private fun combinedTripSteps(steps:List<ApiShiftStep>):List<ApiShiftStep> {
+    val groups=linkedMapOf<String,MutableList<ApiShiftStep>>()
+    steps.forEachIndexed { index, step ->
+        val key=if(step.startAt.isNotBlank() && step.endAt.isNotBlank() &&
+            (step.customerName.isNotBlank() || step.customerPhone.isNotBlank()) &&
+            (step.fromAddress.isNotBlank() || step.toAddress.isNotBlank())) {
+            listOf(step.startAt,step.endAt,step.customerName,step.customerPhone,
+                step.fromAddress,step.toAddress).joinToString("|")
+        } else "single:$index"
+        groups.getOrPut(key){mutableListOf()}.add(step)
+    }
+    return groups.values.map { group ->
+        val first=group.first()
+        if(group.size==1) first else first.copy(
+            time=first.startAt,
+            title=group.firstOrNull{it.title.isNotBlank()}?.title.orEmpty(),
+            detail=group.firstOrNull{it.detail.isNotBlank()}?.detail.orEmpty(),
+            notes=group.firstOrNull{it.notes.isNotBlank()}?.notes.orEmpty()
+        )
+    }.sortedWith(compareBy<ApiShiftStep>{shiftStepSortKey(it)})
+}
+
 @Composable
 private fun RealShiftCard(s:ApiShift,expanded:Boolean){
     var open by remember(s.date) { mutableStateOf(expanded) }
@@ -470,7 +494,7 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
                 style=MaterialTheme.typography.bodySmall)
             if(open){
                 HorizontalDivider(Modifier.padding(vertical=10.dp))
-                if(s.steps.isEmpty()) Text("Ingen vagttrin.") else s.steps.sortedWith(compareBy<ApiShiftStep> { shiftStepSortKey(it) }).forEach { step ->
+                if(s.steps.isEmpty()) Text("Ingen vagttrin.") else combinedTripSteps(s.steps).forEach { step ->
                     val hasCustomer=step.title.isNotBlank() || step.detail.isNotBlank() ||
                         step.customerName.isNotBlank() || step.customerPhone.isNotBlank() ||
                         step.fromAddress.isNotBlank() || step.toAddress.isNotBlank()
@@ -479,11 +503,13 @@ private fun RealShiftCard(s:ApiShift,expanded:Boolean){
                             .then(if(hasCustomer) Modifier.clickable { selectedCustomer=step } else Modifier)
                             .padding(vertical=9.dp)
                     ) {
-                        Text(clock(step.time), modifier=Modifier.width(58.dp), fontWeight=FontWeight.Bold)
+                        Text(if(step.startAt.isNotBlank() && step.endAt.isNotBlank()) "${clock(step.startAt)} – ${clock(step.endAt)}" else clock(step.time), modifier=Modifier.width(if(step.startAt.isNotBlank() && step.endAt.isNotBlank()) 112.dp else 58.dp), fontWeight=FontWeight.Bold)
                         Column(Modifier.weight(1f)) {
                             Text(step.customerName.ifBlank { step.title }, fontWeight=FontWeight.Bold)
                             if(step.customerName.isNotBlank() && step.title.isNotBlank()) Text(step.title,style=MaterialTheme.typography.bodySmall)
-                            if(step.detail.isNotBlank()) Text(step.detail,style=MaterialTheme.typography.bodySmall)
+                            if(step.fromAddress.isNotBlank()) Text("Afhentning: ${step.fromAddress}",style=MaterialTheme.typography.bodySmall)
+                            if(step.toAddress.isNotBlank()) Text("Destination: ${step.toAddress}",style=MaterialTheme.typography.bodySmall)
+                            if(step.fromAddress.isBlank() && step.toAddress.isBlank() && step.detail.isNotBlank()) Text(step.detail,style=MaterialTheme.typography.bodySmall)
                             if(hasCustomer) Text("Se kundedetaljer",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelMedium)
                         }
                         if(hasCustomer) Icon(Icons.Default.ChevronRight,contentDescription="Åbn kundedetaljer")
